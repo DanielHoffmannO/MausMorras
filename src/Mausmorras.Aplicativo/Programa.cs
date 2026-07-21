@@ -17,18 +17,24 @@ var janela = new Window
 var visaoDoMapa = new VisaoDoMapa(estado, caminhoDoSave);
 var painelStatus = new PainelStatus(() => visaoDoMapa.Estado) { Y = 0 };
 var painelMensagens = new PainelMensagens(() => visaoDoMapa.Estado) { Y = Pos.AnchorEnd(6) };
+var miniMapa = new MiniMapa(() => visaoDoMapa.Estado);
 
 visaoDoMapa.Y = Pos.Bottom(painelStatus);
 visaoDoMapa.Height = Dim.Fill(6);
+
+miniMapa.X = Pos.AnchorEnd(MiniMapa.LarguraTotal);
+miniMapa.Y = Pos.Bottom(painelStatus);
 
 visaoDoMapa.AoAtualizar = () =>
 {
     painelStatus.SetNeedsDraw();
     painelMensagens.SetNeedsDraw();
+    miniMapa.SetNeedsDraw();
 };
 
 janela.Add(painelStatus);
 janela.Add(visaoDoMapa);
+janela.Add(miniMapa);
 janela.Add(painelMensagens);
 
 Application.Run(janela);

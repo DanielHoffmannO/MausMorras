@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj": {}
+    "/home/hoffmann/Project/MausMorras/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj": {}
   },
   "projects": {
-    "/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj": {
+    "/home/hoffmann/Project/MausMorras/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj",
+        "projectUniqueName": "/home/hoffmann/Project/MausMorras/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj",
         "projectName": "Mausmorras.Nucleo",
-        "projectPath": "/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj",
+        "projectPath": "/home/hoffmann/Project/MausMorras/src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj",
         "packagesPath": "/home/hoffmann/.nuget/packages/",
-        "outputPath": "/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/",
+        "outputPath": "/home/hoffmann/Project/MausMorras/src/Mausmorras.Nucleo/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/home/hoffmann/.nuget/NuGet/NuGet.Config"

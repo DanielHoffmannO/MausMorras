@@ -33,7 +33,7 @@ public sealed class MapaDaMasmorra
 
     public bool EhCaminhavel(int x, int y) => DentroDosLimites(x, y) && this[x, y] switch
     {
-        TipoDeCelula.Parede or TipoDeCelula.ParedeDecorada or TipoDeCelula.Abismo => false,
+        TipoDeCelula.Parede or TipoDeCelula.ParedeDecorada => false,
         _ => true
     };
 

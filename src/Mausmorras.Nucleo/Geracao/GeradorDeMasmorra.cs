@@ -50,6 +50,7 @@ public sealed class GeradorDeMasmorra
         foreach (var sala in salas)
         {
             EspalharTerreno(mapa, sala, random);
+            EspalharOuro(mapa, sala, random);
             PosicionarPortas(mapa, sala);
         }
 
@@ -119,6 +120,25 @@ public sealed class GeradorDeMasmorra
                 if (mapa[x, y] == TipoDeCelula.Chao && random.NextDouble() < densidade)
                     mapa[x, y] = tema;
             }
+        }
+    }
+
+    private static void EspalharOuro(MapaDaMasmorra mapa, Sala sala, Random random)
+    {
+        if (sala.Largura <= 2 || sala.Altura <= 2)
+            return;
+
+        if (random.NextDouble() > 0.5)
+            return;
+
+        var quantidadePilhas = random.Next(1, 4);
+        for (var i = 0; i < quantidadePilhas; i++)
+        {
+            var x = random.Next(sala.X + 1, sala.X + sala.Largura - 1);
+            var y = random.Next(sala.Y + 1, sala.Y + sala.Altura - 1);
+
+            if (mapa[x, y] == TipoDeCelula.Chao)
+                mapa[x, y] = TipoDeCelula.Ouro;
         }
     }
 

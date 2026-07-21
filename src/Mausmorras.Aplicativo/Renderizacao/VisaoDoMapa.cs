@@ -38,6 +38,7 @@ public sealed class VisaoDoMapa : View
         TipoDeCelula.Agua => (new Rune('~'), new Color(ColorName16.BrightBlue)),
         TipoDeCelula.Entulho => (new Rune(':'), new Color(ColorName16.Yellow)),
         TipoDeCelula.Abismo => (new Rune(' '), new Color(ColorName16.Black)),
+        TipoDeCelula.Ouro => (new Rune('$'), new Color(ColorName16.BrightYellow)),
         _ => (new Rune('?'), new Color(ColorName16.Red))
     };
 
@@ -121,6 +122,7 @@ public sealed class VisaoDoMapa : View
         if (moveu)
         {
             SetNeedsDraw();
+            AoAtualizar?.Invoke();
             return true;
         }
 

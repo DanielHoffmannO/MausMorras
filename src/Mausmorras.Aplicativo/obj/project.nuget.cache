@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "A7fxync30D8=",
+  "dgSpecHash": "y1IRzaO1wZU=",
   "success": true,
-  "projectFilePath": "/home/hoffmann/Project/TerminalGame/src/Mausmorras.Aplicativo/Mausmorras.Aplicativo.csproj",
+  "projectFilePath": "/home/hoffmann/Project/MausMorras/src/Mausmorras.Aplicativo/Mausmorras.Aplicativo.csproj",
   "expectedPackageFiles": [
     "/home/hoffmann/.nuget/packages/colorhelper/1.8.1/colorhelper.1.8.1.nupkg.sha512",
     "/home/hoffmann/.nuget/packages/jetbrains.annotations/2026.2.0/jetbrains.annotations.2026.2.0.nupkg.sha512",

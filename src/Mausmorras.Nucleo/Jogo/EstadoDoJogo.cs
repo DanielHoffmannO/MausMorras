@@ -10,6 +10,9 @@ public sealed class EstadoDoJogo
 {
     private const int RaioDeVisao = 10;
     private const int MaximoDeMensagens = 200;
+    private const int OuroPorPilha = 10;
+    private const int DanoMinimoAbismo = 2;
+    private const int DanoMaximoAbismo = 5;
 
     private readonly List<string> _mensagens = new();
 
@@ -23,6 +26,7 @@ public sealed class EstadoDoJogo
     public int Andar { get; private set; } = 1;
     public IReadOnlySet<Posicao> CelulasVisiveis { get; private set; } = new HashSet<Posicao>();
     public IReadOnlyList<string> Mensagens => _mensagens;
+    public bool Morto => Jogador.Vida <= 0;
 
     public EstadoDoJogo(int largura, int altura, int? seed = null)
     {
@@ -44,17 +48,35 @@ public sealed class EstadoDoJogo
 
     public bool TentarMoverJogador(Posicao delta)
     {
+        if (Morto)
+            return false;
+
         var alvo = Jogador.Posicao + delta;
         if (!Mapa.EhCaminhavel(alvo))
             return false;
 
         Jogador.Posicao = alvo;
 
-        if (Mapa[alvo.X, alvo.Y] == TipoDeCelula.Grama)
-            Mapa[alvo.X, alvo.Y] = TipoDeCelula.Chao;
+        switch (Mapa[alvo.X, alvo.Y])
+        {
+            case TipoDeCelula.Grama:
+                Mapa[alvo.X, alvo.Y] = TipoDeCelula.Chao;
+                break;
 
-        if (Mapa[alvo.X, alvo.Y] == TipoDeCelula.Escada)
-            Descer();
+            case TipoDeCelula.Ouro:
+                Mapa[alvo.X, alvo.Y] = TipoDeCelula.Chao;
+                Jogador.Ouro += OuroPorPilha;
+                AdicionarMensagem($"Você encontra {OuroPorPilha} moedas de ouro.");
+                break;
+
+            case TipoDeCelula.Abismo:
+                CairNoAbismo();
+                break;
+
+            case TipoDeCelula.Escada:
+                Descer();
+                break;
+        }
 
         AtualizarVisibilidade();
         return true;
@@ -69,6 +91,9 @@ public sealed class EstadoDoJogo
             Andar = Andar,
             JogadorX = Jogador.Posicao.X,
             JogadorY = Jogador.Posicao.Y,
+            VidaJogador = Jogador.Vida,
+            VidaMaximaJogador = Jogador.VidaMaxima,
+            OuroJogador = Jogador.Ouro,
             Celulas = new int[Mapa.Largura * Mapa.Altura],
             Explorada = new bool[Mapa.Largura * Mapa.Altura],
             Mensagens = _mensagens.ToList()
@@ -112,7 +137,11 @@ public sealed class EstadoDoJogo
             _random = new Random(),
             Mapa = mapa,
             Salas = Array.Empty<Sala>(),
-            Jogador = new Jogador(new Posicao(dto.JogadorX, dto.JogadorY)),
+            Jogador = new Jogador(new Posicao(dto.JogadorX, dto.JogadorY), dto.VidaMaximaJogador)
+            {
+                Vida = dto.VidaJogador,
+                Ouro = dto.OuroJogador
+            },
             Andar = dto.Andar
         };
 
@@ -134,6 +163,16 @@ public sealed class EstadoDoJogo
         (Mapa, Salas) = GerarNivel();
         Jogador.Posicao = Salas.Count > 0 ? Salas[0].Centro : new Posicao(_largura / 2, _altura / 2);
         AdicionarMensagem($"Você desce para o andar {Andar}.");
+    }
+
+    private void CairNoAbismo()
+    {
+        var dano = _random.Next(DanoMinimoAbismo, DanoMaximoAbismo + 1);
+        Jogador.Vida = Math.Max(0, Jogador.Vida - dano);
+        AdicionarMensagem($"Você cai num abismo e se machuca! (-{dano} vida)");
+
+        if (Morto)
+            AdicionarMensagem("Você morreu na masmorra...");
     }
 
     private void AtualizarVisibilidade()
