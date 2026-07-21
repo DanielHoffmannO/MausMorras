@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mausmorras.Aplicativo/Mausmorras.Aplicativo.csproj" />
+    <Project Path="src/Mausmorras.Nucleo/Mausmorras.Nucleo.csproj" />
+  </Folder>
+</Solution>

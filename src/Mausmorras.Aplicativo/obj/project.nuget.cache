@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "dgSpecHash": "A7fxync30D8=",
+  "success": true,
+  "projectFilePath": "/home/hoffmann/Project/TerminalGame/src/Mausmorras.Aplicativo/Mausmorras.Aplicativo.csproj",
+  "expectedPackageFiles": [
+    "/home/hoffmann/.nuget/packages/colorhelper/1.8.1/colorhelper.1.8.1.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/jetbrains.annotations/2026.2.0/jetbrains.annotations.2026.2.0.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/markdig/1.3.2/markdig.1.3.2.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.configuration/10.0.7/microsoft.extensions.configuration.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.configuration.abstractions/10.0.7/microsoft.extensions.configuration.abstractions.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.configuration.binder/10.0.7/microsoft.extensions.configuration.binder.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.configuration.fileextensions/10.0.7/microsoft.extensions.configuration.fileextensions.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.configuration.json/10.0.7/microsoft.extensions.configuration.json.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.dependencyinjection.abstractions/10.0.9/microsoft.extensions.dependencyinjection.abstractions.10.0.9.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.fileproviders.abstractions/10.0.7/microsoft.extensions.fileproviders.abstractions.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.fileproviders.physical/10.0.7/microsoft.extensions.fileproviders.physical.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.filesystemglobbing/10.0.7/microsoft.extensions.filesystemglobbing.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.logging.abstractions/10.0.7/microsoft.extensions.logging.abstractions.10.0.7.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.options/10.0.9/microsoft.extensions.options.10.0.9.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/microsoft.extensions.primitives/10.0.9/microsoft.extensions.primitives.10.0.9.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/onigwrap/1.0.11/onigwrap.1.0.11.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/system.io.abstractions/22.1.1/system.io.abstractions.22.1.1.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/terminal.gui/2.4.17/terminal.gui.2.4.17.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/testableio.system.io.abstractions/22.1.1/testableio.system.io.abstractions.22.1.1.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/testableio.system.io.abstractions.wrappers/22.1.1/testableio.system.io.abstractions.wrappers.22.1.1.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/testably.abstractions.filesystem.interface/10.1.0/testably.abstractions.filesystem.interface.10.1.0.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/textmatesharp/2.0.4/textmatesharp.2.0.4.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/textmatesharp.grammars/2.0.4/textmatesharp.grammars.2.0.4.nupkg.sha512",
+    "/home/hoffmann/.nuget/packages/wcwidth/4.0.1/wcwidth.4.0.1.nupkg.sha512"
+  ],
+  "logs": []
+}

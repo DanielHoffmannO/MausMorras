@@ -1,0 +1,11 @@
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/bin/Debug/net10.0/Mausmorras.Nucleo.deps.json
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/bin/Debug/net10.0/Mausmorras.Nucleo.dll
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/bin/Debug/net10.0/Mausmorras.Nucleo.pdb
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/Mausmorras.Nucleo.GeneratedMSBuildEditorConfig.editorconfig
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/Mausmorras.Nucleo.AssemblyInfoInputs.cache
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/Mausmorras.Nucleo.AssemblyInfo.cs
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/Mausmorras.Nucleo.csproj.CoreCompileInputs.cache
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/Mausmorras.Nucleo.dll
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/refint/Mausmorras.Nucleo.dll
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/Mausmorras.Nucleo.pdb
+/home/hoffmann/Project/TerminalGame/src/Mausmorras.Nucleo/obj/Debug/net10.0/ref/Mausmorras.Nucleo.dll
