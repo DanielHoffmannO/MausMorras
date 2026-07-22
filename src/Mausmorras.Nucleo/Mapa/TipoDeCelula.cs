@@ -13,5 +13,9 @@ public enum TipoDeCelula
     Ouro,
     Item,
     Terra,
-    Pedra
+    Pedra,
+    Casa,
+    Arvore,
+    EntradaMasmorra,
+    SaidaParaVila
 }

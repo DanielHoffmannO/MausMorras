@@ -12,9 +12,20 @@ public sealed class EstadoDoJogo
     private const int RaioDeVisao = 10;
     private const int MaximoDeMensagens = 200;
     private const int OuroPorPilha = 10;
+    private const int LarguraDaVila = 70;
+    private const int AlturaDaVila = 35;
+    private const int TurnosPorMetadeDoDia = 60;
+    private const int RaioDeVisaoNoiteNaVila = 6;
+    private const int MadeiraPorArvore = 5;
+    private const int TamanhoDaCasa = 5;
+    private const double ChanceDeRebrotaPorCelula = 0.01;
 
     private readonly List<string> _mensagens = new();
     private Dictionary<Posicao, Item> _itensNoChao = new();
+    private MapaDaMasmorra? _mapaDaVila;
+    private IReadOnlyList<Sala> _salasDaVila = Array.Empty<Sala>();
+    private Posicao _ultimaDirecao = Direcao.Sul;
+    private int _turno;
 
     private int _largura;
     private int _altura;
@@ -24,9 +35,12 @@ public sealed class EstadoDoJogo
     public IReadOnlyList<Sala> Salas { get; private set; } = Array.Empty<Sala>();
     public Jogador Jogador { get; private set; } = null!;
     public int Andar { get; private set; } = 1;
+    public TipoDeLocal LocalAtual => Andar == 0 ? TipoDeLocal.Vila : TipoDeLocal.Masmorra;
     public IReadOnlySet<Posicao> CelulasVisiveis { get; private set; } = new HashSet<Posicao>();
     public IReadOnlyList<string> Mensagens => _mensagens;
     public bool Morto => Jogador.Vida <= 0;
+    public int Turno => _turno;
+    public bool EhDia => (_turno / TurnosPorMetadeDoDia) % 2 == 0;
 
     public EstadoDoJogo(int largura, int altura, int? seed = null)
     {
@@ -34,11 +48,9 @@ public sealed class EstadoDoJogo
         _altura = altura;
         _random = seed.HasValue ? new Random(seed.Value) : new Random();
 
-        (Mapa, Salas) = GerarNivel();
-
-        var inicio = Salas.Count > 0 ? Salas[0].Centro : new Posicao(largura / 2, altura / 2);
+        var inicio = PrepararVila();
         Jogador = new Jogador(inicio);
-        AdicionarMensagem("Você entra na masmorra escura.");
+        AdicionarMensagem("Você acorda na vila.");
         AtualizarVisibilidade();
     }
 
@@ -52,10 +64,19 @@ public sealed class EstadoDoJogo
             return false;
 
         var alvo = Jogador.Posicao + delta;
+
+        if (Mapa[alvo.X, alvo.Y] == TipoDeCelula.Arvore)
+        {
+            CortarArvore(alvo);
+            AvancarTurno();
+            return true;
+        }
+
         if (!Mapa.EhCaminhavel(alvo))
             return false;
 
         Jogador.Posicao = alvo;
+        _ultimaDirecao = delta;
 
         switch (Mapa[alvo.X, alvo.Y])
         {
@@ -76,10 +97,84 @@ public sealed class EstadoDoJogo
             case TipoDeCelula.Escada:
                 Descer();
                 break;
+
+            case TipoDeCelula.EntradaMasmorra:
+                EntrarNaMasmorra();
+                break;
+
+            case TipoDeCelula.SaidaParaVila:
+                EntrarNaVila();
+                break;
         }
 
-        AtualizarVisibilidade();
+        AvancarTurno();
         return true;
+    }
+
+    public bool TentarConstruir()
+    {
+        if (Morto || LocalAtual != TipoDeLocal.Vila)
+            return false;
+
+        var area = CalcularAreaDaCasa(Jogador.Posicao, _ultimaDirecao);
+
+        if (!AreaLivreParaConstrucao(area))
+        {
+            AdicionarMensagem("Não há espaço livre suficiente para construir aqui.");
+            return false;
+        }
+
+        var custo = area.Largura * area.Altura;
+        if (Jogador.Madeira < custo)
+        {
+            AdicionarMensagem($"Madeira insuficiente para construir (precisa de {custo}).");
+            return false;
+        }
+
+        ConstruirCasa(area, Jogador.Posicao + _ultimaDirecao);
+        Jogador.Madeira -= custo;
+        AdicionarMensagem("Você constrói uma casa.");
+        AvancarTurno();
+        return true;
+    }
+
+    private static Sala CalcularAreaDaCasa(Posicao jogador, Posicao direcao)
+    {
+        var metade = TamanhoDaCasa / 2;
+
+        if (direcao == Direcao.Sul)
+            return new Sala(jogador.X - metade, jogador.Y + 1, TamanhoDaCasa, TamanhoDaCasa);
+
+        if (direcao == Direcao.Norte)
+            return new Sala(jogador.X - metade, jogador.Y - TamanhoDaCasa, TamanhoDaCasa, TamanhoDaCasa);
+
+        if (direcao == Direcao.Leste)
+            return new Sala(jogador.X + 1, jogador.Y - metade, TamanhoDaCasa, TamanhoDaCasa);
+
+        return new Sala(jogador.X - TamanhoDaCasa, jogador.Y - metade, TamanhoDaCasa, TamanhoDaCasa);
+    }
+
+    private bool AreaLivreParaConstrucao(Sala area)
+    {
+        for (var x = area.X; x < area.X + area.Largura; x++)
+            for (var y = area.Y; y < area.Y + area.Altura; y++)
+                if (!Mapa.DentroDosLimites(x, y) || Mapa[x, y] != TipoDeCelula.Grama)
+                    return false;
+
+        return true;
+    }
+
+    private void ConstruirCasa(Sala area, Posicao porta)
+    {
+        for (var x = area.X; x < area.X + area.Largura; x++)
+            for (var y = area.Y; y < area.Y + area.Altura; y++)
+                Mapa[x, y] = TipoDeCelula.Casa;
+
+        for (var x = area.X + 1; x < area.X + area.Largura - 1; x++)
+            for (var y = area.Y + 1; y < area.Y + area.Altura - 1; y++)
+                Mapa[x, y] = TipoDeCelula.Chao;
+
+        Mapa[porta.X, porta.Y] = TipoDeCelula.Porta;
     }
 
     public void AcionarItemDaMochila(int indice)
@@ -140,6 +235,8 @@ public sealed class EstadoDoJogo
             VidaJogador = Jogador.Vida,
             VidaMaximaJogador = Jogador.VidaMaxima,
             OuroJogador = Jogador.Ouro,
+            MadeiraJogador = Jogador.Madeira,
+            Turno = _turno,
             Celulas = new int[Mapa.Largura * Mapa.Altura],
             Explorada = new bool[Mapa.Largura * Mapa.Altura],
             Mensagens = _mensagens.ToList(),
@@ -187,7 +284,8 @@ public sealed class EstadoDoJogo
         var jogador = new Jogador(new Posicao(dto.JogadorX, dto.JogadorY), dto.VidaMaximaJogador)
         {
             Vida = dto.VidaJogador,
-            Ouro = dto.OuroJogador
+            Ouro = dto.OuroJogador,
+            Madeira = dto.MadeiraJogador
         };
 
         jogador.Mochila.AddRange(dto.Mochila.Select(DeSalvo));
@@ -201,12 +299,19 @@ public sealed class EstadoDoJogo
             _largura = dto.Largura,
             _altura = dto.Altura,
             _random = new Random(),
+            _turno = dto.Turno,
             Mapa = mapa,
             Salas = Array.Empty<Sala>(),
             Jogador = jogador,
             Andar = dto.Andar,
             _itensNoChao = dto.ItensNoChao.ToDictionary(i => new Posicao(i.X, i.Y), i => DeSalvo(i.Item))
         };
+
+        if (dto.Andar == 0)
+        {
+            estado._mapaDaVila = mapa;
+            estado._salasDaVila = new[] { new Sala(dto.JogadorX, dto.JogadorY, 1, 1) };
+        }
 
         estado._mensagens.AddRange(dto.Mensagens);
         estado.AdicionarMensagem("Jogo carregado.");
@@ -224,6 +329,38 @@ public sealed class EstadoDoJogo
         var (mapa, salas, itens) = gerador.Gerar(_largura, _altura, _random);
         _itensNoChao = new Dictionary<Posicao, Item>(itens);
         return (mapa, salas);
+    }
+
+    private Posicao PrepararVila()
+    {
+        if (_mapaDaVila is null)
+        {
+            var (mapaGerado, salasGeradas, _) = new GeradorDeVila().Gerar(LarguraDaVila, AlturaDaVila, _random);
+            _mapaDaVila = mapaGerado;
+            _salasDaVila = salasGeradas;
+        }
+
+        Mapa = _mapaDaVila;
+        Salas = _salasDaVila;
+        Andar = 0;
+        _itensNoChao = new Dictionary<Posicao, Item>();
+        return _salasDaVila.Count > 0 ? _salasDaVila[0].Centro : new Posicao(LarguraDaVila / 2, AlturaDaVila / 2);
+    }
+
+    private void EntrarNaVila()
+    {
+        Jogador.Posicao = PrepararVila();
+        AdicionarMensagem("Você retorna à vila.");
+    }
+
+    private void EntrarNaMasmorra()
+    {
+        Andar = 1;
+        (Mapa, Salas) = GerarNivel();
+        var spawn = Salas.Count > 0 ? Salas[0].Centro : new Posicao(_largura / 2, _altura / 2);
+        Mapa[spawn.X, spawn.Y] = TipoDeCelula.SaidaParaVila;
+        Jogador.Posicao = spawn;
+        AdicionarMensagem("Você entra na masmorra escura.");
     }
 
     private void Descer()
@@ -245,6 +382,13 @@ public sealed class EstadoDoJogo
         AdicionarMensagem($"Você pega {item.Nome}.");
     }
 
+    private void CortarArvore(Posicao posicao)
+    {
+        Mapa[posicao.X, posicao.Y] = TipoDeCelula.Grama;
+        Jogador.Madeira += MadeiraPorArvore;
+        AdicionarMensagem($"Você corta a árvore e ganha {MadeiraPorArvore} de madeira.");
+    }
+
     private void UsarConsumivel(Item item)
     {
         var antes = Jogador.Vida;
@@ -256,9 +400,57 @@ public sealed class EstadoDoJogo
             : $"Você usa {item.Nome}, mas já estava com a vida cheia.");
     }
 
+    private void AvancarTurno()
+    {
+        var eraDia = EhDia;
+        _turno++;
+
+        if (LocalAtual == TipoDeLocal.Vila && eraDia != EhDia)
+        {
+            AdicionarMensagem(EhDia ? "O dia amanhece sobre a vila." : "A noite cai sobre a vila.");
+            if (EhDia)
+                RegenerarArvores();
+        }
+
+        AtualizarVisibilidade();
+    }
+
+    private void RegenerarArvores()
+    {
+        if (_mapaDaVila is null)
+            return;
+
+        for (var x = 0; x < _mapaDaVila.Largura; x++)
+        {
+            for (var y = 0; y < _mapaDaVila.Altura; y++)
+            {
+                if (_mapaDaVila[x, y] == TipoDeCelula.Grama && _random.NextDouble() < ChanceDeRebrotaPorCelula)
+                    _mapaDaVila[x, y] = TipoDeCelula.Arvore;
+            }
+        }
+    }
+
     private void AtualizarVisibilidade()
     {
-        CelulasVisiveis = CampoDeVisao.Calcular(Mapa, Jogador.Posicao, RaioDeVisao);
+        if (LocalAtual == TipoDeLocal.Vila && EhDia)
+        {
+            var visiveis = new HashSet<Posicao>();
+            for (var x = 0; x < Mapa.Largura; x++)
+            {
+                for (var y = 0; y < Mapa.Altura; y++)
+                {
+                    var posicao = new Posicao(x, y);
+                    visiveis.Add(posicao);
+                    Mapa.MarcarExplorada(x, y);
+                }
+            }
+
+            CelulasVisiveis = visiveis;
+            return;
+        }
+
+        var raio = LocalAtual == TipoDeLocal.Vila ? RaioDeVisaoNoiteNaVila : RaioDeVisao;
+        CelulasVisiveis = CampoDeVisao.Calcular(Mapa, Jogador.Posicao, raio);
         foreach (var celula in CelulasVisiveis)
             Mapa.MarcarExplorada(celula.X, celula.Y);
     }

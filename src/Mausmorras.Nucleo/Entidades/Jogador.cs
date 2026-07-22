@@ -9,6 +9,7 @@ public sealed class Jogador
     public int VidaMaxima { get; }
     public int Vida { get; set; }
     public int Ouro { get; set; }
+    public int Madeira { get; set; }
 
     public Item? Capacete { get; set; }
     public Item? Peitoral { get; set; }

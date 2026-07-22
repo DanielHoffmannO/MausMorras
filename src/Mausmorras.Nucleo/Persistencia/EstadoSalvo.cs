@@ -12,6 +12,8 @@ public sealed class EstadoSalvo
     public int VidaJogador { get; set; }
     public int VidaMaximaJogador { get; set; }
     public int OuroJogador { get; set; }
+    public int MadeiraJogador { get; set; }
+    public int Turno { get; set; }
     public int[] Celulas { get; set; } = Array.Empty<int>();
     public bool[] Explorada { get; set; } = Array.Empty<bool>();
     public List<string> Mensagens { get; set; } = new();

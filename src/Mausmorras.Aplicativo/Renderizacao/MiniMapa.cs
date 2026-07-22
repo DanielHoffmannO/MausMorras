@@ -54,6 +54,8 @@ public sealed class MiniMapa : PainelDeEstado
         TipoDeCelula.Parede or TipoDeCelula.ParedeDecorada => (new Rune(' '), Cores.Fundo),
         TipoDeCelula.Escada => (new Rune('>'), Cores.Escada),
         TipoDeCelula.Ouro => (new Rune('$'), Cores.Ouro),
+        TipoDeCelula.EntradaMasmorra => (new Rune('▼'), Cores.EntradaMasmorra),
+        TipoDeCelula.SaidaParaVila => (new Rune('▲'), Cores.SaidaParaVila),
         _ => (new Rune('·'), Cores.TextoSecundario)
     };
 }

@@ -40,6 +40,10 @@ public sealed class VisaoDoMapa : View
         TipoDeCelula.Item => (new Rune('!'), Cores.Item),
         TipoDeCelula.Terra => (new Rune('"'), Cores.Terra),
         TipoDeCelula.Pedra => (new Rune('o'), Cores.Pedra),
+        TipoDeCelula.Casa => (new Rune('⌂'), Cores.Casa),
+        TipoDeCelula.Arvore => (new Rune('♣'), Cores.Arvore),
+        TipoDeCelula.EntradaMasmorra => (new Rune('▼'), Cores.EntradaMasmorra),
+        TipoDeCelula.SaidaParaVila => (new Rune('▲'), Cores.SaidaParaVila),
         _ => (new Rune('?'), Cores.Perigo)
     };
 
@@ -120,6 +124,14 @@ public sealed class VisaoDoMapa : View
         if (key.AsRune.Value is 'm' or 'M')
         {
             AoAlternarMiniMapa?.Invoke();
+            return true;
+        }
+
+        if (key.AsRune.Value is 'c' or 'C')
+        {
+            _estado.TentarConstruir();
+            SetNeedsDraw();
+            AoAtualizar?.Invoke();
             return true;
         }
 

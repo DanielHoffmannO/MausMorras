@@ -13,14 +13,22 @@ public sealed class PainelStatus : PainelDeEstado
     protected override void Desenhar(EstadoDoJogo estado)
     {
         var jogador = estado.Jogador;
-        var x = EscreverSegmento(0, $" Andar {estado.Andar}  ", Cores.TextoPrincipal);
+        var textoLocal = estado.LocalAtual == TipoDeLocal.Vila ? " Vila  " : $" Andar {estado.Andar}  ";
+        var x = EscreverSegmento(0, textoLocal, Cores.TextoPrincipal);
 
         var corVida = estado.Morto ? Cores.Perigo : CorDaVida((double)jogador.Vida / jogador.VidaMaxima);
         var textoVida = estado.Morto ? $"Vida: 0/{jogador.VidaMaxima} (MORTO)" : $"Vida: {jogador.Vida}/{jogador.VidaMaxima}";
         x = EscreverSegmento(x, textoVida, corVida);
 
+        if (estado.LocalAtual == TipoDeLocal.Vila)
+        {
+            var corPeriodo = estado.EhDia ? Cores.TextoPrincipal : Cores.TextoSecundario;
+            x = EscreverSegmento(x, estado.EhDia ? "  Dia" : "  Noite", corPeriodo);
+        }
+
         x = EscreverSegmento(x, $"  Ouro: {jogador.Ouro}", Cores.Ouro);
-        EscreverSegmento(x, "  —  I inventário, M minimapa, F5/F9 salvar ", Cores.TextoSecundario);
+        x = EscreverSegmento(x, $"  Madeira: {jogador.Madeira}", Cores.Casa);
+        EscreverSegmento(x, "  —  I inv, M mapa, C construir, F5/F9 salvar ", Cores.TextoSecundario);
     }
 
     private int EscreverSegmento(int x, string texto, Color cor)

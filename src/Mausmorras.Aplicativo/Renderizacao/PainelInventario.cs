@@ -64,6 +64,7 @@ public sealed class PainelInventario : PainelDeEstado
         SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
         AddStr(2, 8, $"Defesa total: {jogador.DefesaTotal}");
         AddStr(2, 9, $"Vida: {jogador.Vida}/{jogador.VidaMaxima}   Ouro: {jogador.Ouro}");
+        AddStr(2, 10, $"Madeira: {jogador.Madeira}");
 
         if (jogador.Mochila.Count == 0)
         {
