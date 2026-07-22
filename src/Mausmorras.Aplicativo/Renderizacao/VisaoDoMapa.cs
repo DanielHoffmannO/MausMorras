@@ -12,6 +12,8 @@ public sealed class VisaoDoMapa : View
     private EstadoDoJogo _estado;
 
     public Action? AoAtualizar { get; set; }
+    public Action? AoAbrirInventario { get; set; }
+    public Action? AoAlternarMiniMapa { get; set; }
 
     public EstadoDoJogo Estado => _estado;
 
@@ -24,22 +26,20 @@ public sealed class VisaoDoMapa : View
         Height = Dim.Fill();
     }
 
-    private static readonly Color CorDeFundo = new(ColorName16.Black);
-    private static readonly Color CorDoJogador = new(ColorName16.BrightYellow);
-
     private static (Rune Glifo, Color CorFrente) ObterVisualDaCelula(TipoDeCelula celula) => celula switch
     {
-        TipoDeCelula.Parede => (new Rune('#'), new Color(ColorName16.DarkGray)),
-        TipoDeCelula.ParedeDecorada => (new Rune('%'), new Color(ColorName16.BrightRed).GetDimmerColor(0.3)),
-        TipoDeCelula.Chao => (new Rune('.'), new Color(ColorName16.Gray)),
-        TipoDeCelula.Porta => (new Rune('+'), new Color(ColorName16.BrightYellow)),
-        TipoDeCelula.Escada => (new Rune('>'), new Color(ColorName16.BrightCyan)),
-        TipoDeCelula.Grama => (new Rune(','), new Color(ColorName16.BrightGreen)),
-        TipoDeCelula.Agua => (new Rune('~'), new Color(ColorName16.BrightBlue)),
-        TipoDeCelula.Entulho => (new Rune(':'), new Color(ColorName16.Yellow)),
-        TipoDeCelula.Abismo => (new Rune(' '), new Color(ColorName16.Black)),
-        TipoDeCelula.Ouro => (new Rune('$'), new Color(ColorName16.BrightYellow)),
-        _ => (new Rune('?'), new Color(ColorName16.Red))
+        TipoDeCelula.Parede => (new Rune('#'), Cores.Parede),
+        TipoDeCelula.ParedeDecorada => (new Rune('%'), Cores.ParedeDecorada),
+        TipoDeCelula.Chao => (new Rune('.'), Cores.Chao),
+        TipoDeCelula.Porta => (new Rune('+'), Cores.Porta),
+        TipoDeCelula.Escada => (new Rune('>'), Cores.Escada),
+        TipoDeCelula.Grama => (new Rune(','), Cores.Grama),
+        TipoDeCelula.Agua => (new Rune('~'), Cores.Agua),
+        TipoDeCelula.Entulho => (new Rune(':'), Cores.Entulho),
+        TipoDeCelula.Abismo => (new Rune(' '), Cores.Abismo),
+        TipoDeCelula.Ouro => (new Rune('$'), Cores.Ouro),
+        TipoDeCelula.Item => (new Rune('!'), Cores.Item),
+        _ => (new Rune('?'), Cores.Perigo)
     };
 
     protected override bool OnDrawingContent(DrawContext context)
@@ -71,12 +71,12 @@ public sealed class VisaoDoMapa : View
                 var (glifo, corFrente) = ObterVisualDaCelula(mapa[mapaX, mapaY]);
                 var visivel = _estado.CelulasVisiveis.Contains(new Posicao(mapaX, mapaY));
 
-                SetAttribute(new Attribute(visivel ? corFrente : corFrente.GetDimmerColor(IntensidadeEscurecimento), CorDeFundo));
+                SetAttribute(new Attribute(visivel ? corFrente : corFrente.GetDimmerColor(IntensidadeEscurecimento), Cores.Fundo));
                 AddRune(telaX, telaY, glifo);
             }
         }
 
-        SetAttribute(new Attribute(CorDoJogador, CorDeFundo));
+        SetAttribute(new Attribute(Cores.Jogador, Cores.Fundo));
         AddRune(jogador.X - camX, jogador.Y - camY, new Rune('@'));
 
         return true;
@@ -107,6 +107,18 @@ public sealed class VisaoDoMapa : View
                 AoAtualizar?.Invoke();
             }
 
+            return true;
+        }
+
+        if (key.AsRune.Value is 'i' or 'I')
+        {
+            AoAbrirInventario?.Invoke();
+            return true;
+        }
+
+        if (key.AsRune.Value is 'm' or 'M')
+        {
+            AoAlternarMiniMapa?.Invoke();
             return true;
         }
 

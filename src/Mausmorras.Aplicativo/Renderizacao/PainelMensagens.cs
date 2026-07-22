@@ -2,29 +2,22 @@ using Mausmorras.Nucleo.Jogo;
 
 namespace Mausmorras.Aplicativo.Renderizacao;
 
-public sealed class PainelMensagens : View
+public sealed class PainelMensagens : PainelDeEstado
 {
-    private readonly Func<EstadoDoJogo> _obterEstado;
-
-    public PainelMensagens(Func<EstadoDoJogo> obterEstado)
+    public PainelMensagens(Func<EstadoDoJogo> obterEstado) : base(obterEstado)
     {
-        _obterEstado = obterEstado;
         Width = Dim.Fill();
         Height = 6;
     }
 
-    protected override bool OnDrawingContent(DrawContext context)
+    protected override void Desenhar(EstadoDoJogo estado)
     {
-        ClearViewport(context);
-
         var viewport = Viewport;
-        var mensagens = _obterEstado().Mensagens;
+        var mensagens = estado.Mensagens;
         var visiveis = mensagens.Skip(Math.Max(0, mensagens.Count - viewport.Height)).ToList();
 
-        SetAttribute(new Attribute(new Color(ColorName16.Gray), new Color(ColorName16.Black)));
+        SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
         for (var i = 0; i < visiveis.Count; i++)
             AddStr(0, i, visiveis[i]);
-
-        return true;
     }
 }

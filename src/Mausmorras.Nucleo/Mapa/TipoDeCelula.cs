@@ -11,5 +11,6 @@ public enum TipoDeCelula
     Agua,
     Entulho,
     Abismo,
-    Ouro
+    Ouro,
+    Item
 }

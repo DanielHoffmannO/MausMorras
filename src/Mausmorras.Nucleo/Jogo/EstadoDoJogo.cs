@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Mausmorras.Nucleo.Entidades;
 using Mausmorras.Nucleo.Geracao;
+using Mausmorras.Nucleo.Itens;
 using Mausmorras.Nucleo.Mapa;
 using Mausmorras.Nucleo.Persistencia;
 
@@ -15,6 +16,7 @@ public sealed class EstadoDoJogo
     private const int DanoMaximoAbismo = 5;
 
     private readonly List<string> _mensagens = new();
+    private Dictionary<Posicao, Item> _itensNoChao = new();
 
     private int _largura;
     private int _altura;
@@ -69,6 +71,10 @@ public sealed class EstadoDoJogo
                 AdicionarMensagem($"Você encontra {OuroPorPilha} moedas de ouro.");
                 break;
 
+            case TipoDeCelula.Item:
+                ColetarItem(alvo);
+                break;
+
             case TipoDeCelula.Abismo:
                 CairNoAbismo();
                 break;
@@ -80,6 +86,52 @@ public sealed class EstadoDoJogo
 
         AtualizarVisibilidade();
         return true;
+    }
+
+    public void AcionarItemDaMochila(int indice)
+    {
+        if (IndiceInvalido(indice))
+            return;
+
+        var item = Jogador.Mochila[indice];
+
+        if (item.Tipo == TipoDeItem.Generico)
+        {
+            UsarConsumivel(item);
+            Jogador.Mochila.RemoveAt(indice);
+            return;
+        }
+
+        var equipadoAtual = Jogador.ObterEquipado(item.Tipo);
+        Jogador.Equipar(item.Tipo, item);
+        Jogador.Mochila.RemoveAt(indice);
+
+        if (equipadoAtual is not null)
+            Jogador.Mochila.Add(equipadoAtual);
+
+        AdicionarMensagem($"Você equipa {item.Nome}.");
+    }
+
+    public void DescartarDaMochila(int indice)
+    {
+        if (IndiceInvalido(indice))
+            return;
+
+        var item = Jogador.Mochila[indice];
+        Jogador.Mochila.RemoveAt(indice);
+        AdicionarMensagem($"Você joga {item.Nome} no lixo.");
+    }
+
+    private bool IndiceInvalido(int indice) => indice < 0 || indice >= Jogador.Mochila.Count;
+
+    public void DescartarEquipado(TipoDeItem tipo)
+    {
+        var item = Jogador.ObterEquipado(tipo);
+        if (item is null)
+            return;
+
+        Jogador.Equipar(tipo, null);
+        AdicionarMensagem($"Você joga {item.Nome} no lixo.");
     }
 
     public void Salvar(string caminho)
@@ -96,7 +148,15 @@ public sealed class EstadoDoJogo
             OuroJogador = Jogador.Ouro,
             Celulas = new int[Mapa.Largura * Mapa.Altura],
             Explorada = new bool[Mapa.Largura * Mapa.Altura],
-            Mensagens = _mensagens.ToList()
+            Mensagens = _mensagens.ToList(),
+            Mochila = Jogador.Mochila.Select(ParaSalvo).ToList(),
+            Capacete = Jogador.Capacete is { } c ? ParaSalvo(c) : null,
+            Peitoral = Jogador.Peitoral is { } p ? ParaSalvo(p) : null,
+            Pernas = Jogador.Pernas is { } pr ? ParaSalvo(pr) : null,
+            Botas = Jogador.Botas is { } b ? ParaSalvo(b) : null,
+            ItensNoChao = _itensNoChao
+                .Select(kv => new ItemNoChaoSalvo { X = kv.Key.X, Y = kv.Key.Y, Item = ParaSalvo(kv.Value) })
+                .ToList()
         };
 
         for (var x = 0; x < Mapa.Largura; x++)
@@ -130,6 +190,18 @@ public sealed class EstadoDoJogo
             }
         }
 
+        var jogador = new Jogador(new Posicao(dto.JogadorX, dto.JogadorY), dto.VidaMaximaJogador)
+        {
+            Vida = dto.VidaJogador,
+            Ouro = dto.OuroJogador
+        };
+
+        jogador.Mochila.AddRange(dto.Mochila.Select(DeSalvo));
+        if (dto.Capacete is { } dc) jogador.Capacete = DeSalvo(dc);
+        if (dto.Peitoral is { } dp) jogador.Peitoral = DeSalvo(dp);
+        if (dto.Pernas is { } dpr) jogador.Pernas = DeSalvo(dpr);
+        if (dto.Botas is { } db) jogador.Botas = DeSalvo(db);
+
         var estado = new EstadoDoJogo
         {
             _largura = dto.Largura,
@@ -137,12 +209,9 @@ public sealed class EstadoDoJogo
             _random = new Random(),
             Mapa = mapa,
             Salas = Array.Empty<Sala>(),
-            Jogador = new Jogador(new Posicao(dto.JogadorX, dto.JogadorY), dto.VidaMaximaJogador)
-            {
-                Vida = dto.VidaJogador,
-                Ouro = dto.OuroJogador
-            },
-            Andar = dto.Andar
+            Jogador = jogador,
+            Andar = dto.Andar,
+            _itensNoChao = dto.ItensNoChao.ToDictionary(i => new Posicao(i.X, i.Y), i => DeSalvo(i.Item))
         };
 
         estado._mensagens.AddRange(dto.Mensagens);
@@ -151,10 +220,16 @@ public sealed class EstadoDoJogo
         return estado;
     }
 
+    private static ItemSalvo ParaSalvo(Item item) => new() { Nome = item.Nome, Tipo = item.Tipo, Valor = item.Valor };
+
+    private static Item DeSalvo(ItemSalvo salvo) => new(salvo.Nome, salvo.Tipo, salvo.Valor);
+
     private (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas) GerarNivel()
     {
         var gerador = new GeradorDeMasmorra();
-        return gerador.Gerar(_largura, _altura, _random);
+        var (mapa, salas, itens) = gerador.Gerar(_largura, _altura, _random);
+        _itensNoChao = new Dictionary<Posicao, Item>(itens);
+        return (mapa, salas);
     }
 
     private void Descer()
@@ -165,9 +240,32 @@ public sealed class EstadoDoJogo
         AdicionarMensagem($"Você desce para o andar {Andar}.");
     }
 
+    private void ColetarItem(Posicao posicao)
+    {
+        if (!_itensNoChao.TryGetValue(posicao, out var item))
+            return;
+
+        _itensNoChao.Remove(posicao);
+        Mapa[posicao.X, posicao.Y] = TipoDeCelula.Chao;
+        Jogador.Mochila.Add(item);
+        AdicionarMensagem($"Você pega {item.Nome}.");
+    }
+
+    private void UsarConsumivel(Item item)
+    {
+        var antes = Jogador.Vida;
+        Jogador.Vida = Math.Min(Jogador.VidaMaxima, Jogador.Vida + item.Valor);
+        var curado = Jogador.Vida - antes;
+
+        AdicionarMensagem(curado > 0
+            ? $"Você usa {item.Nome} e recupera {curado} de vida."
+            : $"Você usa {item.Nome}, mas já estava com a vida cheia.");
+    }
+
     private void CairNoAbismo()
     {
-        var dano = _random.Next(DanoMinimoAbismo, DanoMaximoAbismo + 1);
+        var danoBase = _random.Next(DanoMinimoAbismo, DanoMaximoAbismo + 1);
+        var dano = Math.Max(1, danoBase - Jogador.DefesaTotal);
         Jogador.Vida = Math.Max(0, Jogador.Vida - dano);
         AdicionarMensagem($"Você cai num abismo e se machuca! (-{dano} vida)");
 

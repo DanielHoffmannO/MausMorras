@@ -1,3 +1,4 @@
+using Mausmorras.Nucleo.Itens;
 using Mausmorras.Nucleo.Mapa;
 
 namespace Mausmorras.Nucleo.Geracao;
@@ -7,6 +8,19 @@ public sealed class GeradorDeMasmorra
     private static readonly TipoDeCelula[] TemasDeTerreno =
     {
         TipoDeCelula.Grama, TipoDeCelula.Agua, TipoDeCelula.Entulho, TipoDeCelula.Abismo
+    };
+
+    private static readonly Func<Item>[] CatalogoDeItens =
+    {
+        () => new Item("Capacete de Couro", TipoDeItem.Capacete, 2),
+        () => new Item("Elmo de Ferro", TipoDeItem.Capacete, 4),
+        () => new Item("Peitoral de Couro", TipoDeItem.Peitoral, 3),
+        () => new Item("Armadura de Ferro", TipoDeItem.Peitoral, 6),
+        () => new Item("Calça de Couro", TipoDeItem.Pernas, 2),
+        () => new Item("Grevas de Ferro", TipoDeItem.Pernas, 4),
+        () => new Item("Botas de Couro", TipoDeItem.Botas, 1),
+        () => new Item("Botas de Ferro", TipoDeItem.Botas, 3),
+        () => new Item("Poção de Vida", TipoDeItem.Generico, 10)
     };
 
     private readonly int _maxSalas;
@@ -22,10 +36,11 @@ public sealed class GeradorDeMasmorra
         _larguraCorredor = larguraCorredor;
     }
 
-    public (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas) Gerar(int largura, int altura, Random random)
+    public (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas, IReadOnlyDictionary<Posicao, Item> Itens) Gerar(int largura, int altura, Random random)
     {
         var mapa = new MapaDaMasmorra(largura, altura);
         var salas = new List<Sala>();
+        var itens = new Dictionary<Posicao, Item>();
 
         for (var i = 0; i < _maxSalas; i++)
         {
@@ -51,13 +66,14 @@ public sealed class GeradorDeMasmorra
         {
             EspalharTerreno(mapa, sala, random);
             EspalharOuro(mapa, sala, random);
+            EspalharItens(mapa, sala, random, itens);
             PosicionarPortas(mapa, sala);
         }
 
         DecorarParedes(mapa, random);
         PosicionarEscada(mapa, salas);
 
-        return (mapa, salas);
+        return (mapa, salas, itens);
     }
 
     private static void EscavarSala(MapaDaMasmorra mapa, Sala sala)
@@ -140,6 +156,26 @@ public sealed class GeradorDeMasmorra
             if (mapa[x, y] == TipoDeCelula.Chao)
                 mapa[x, y] = TipoDeCelula.Ouro;
         }
+    }
+
+    private static void EspalharItens(MapaDaMasmorra mapa, Sala sala, Random random, Dictionary<Posicao, Item> itens)
+    {
+        if (sala.Largura <= 2 || sala.Altura <= 2)
+            return;
+
+        if (random.NextDouble() > 0.3)
+            return;
+
+        var x = random.Next(sala.X + 1, sala.X + sala.Largura - 1);
+        var y = random.Next(sala.Y + 1, sala.Y + sala.Altura - 1);
+
+        if (mapa[x, y] != TipoDeCelula.Chao)
+            return;
+
+        var item = CatalogoDeItens[random.Next(CatalogoDeItens.Length)]();
+        var posicao = new Posicao(x, y);
+        mapa[x, y] = TipoDeCelula.Item;
+        itens[posicao] = item;
     }
 
     private static void PosicionarPortas(MapaDaMasmorra mapa, Sala sala)

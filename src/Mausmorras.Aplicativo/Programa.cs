@@ -11,31 +11,51 @@ var estado = new EstadoDoJogo(largura: 220, altura: 110);
 
 var janela = new Window
 {
-    Title = "Mausmorras (setas ou WASD para mover, F5 salva, F9 carrega, Esc para sair)"
+    Title = "Mausmorras (setas ou WASD move, I inventário, M minimapa, F5 salva, F9 carrega, Esc sai)"
 };
 
 var visaoDoMapa = new VisaoDoMapa(estado, caminhoDoSave);
 var painelStatus = new PainelStatus(() => visaoDoMapa.Estado) { Y = 0 };
 var painelMensagens = new PainelMensagens(() => visaoDoMapa.Estado) { Y = Pos.AnchorEnd(6) };
-var miniMapa = new MiniMapa(() => visaoDoMapa.Estado);
+var miniMapa = new MiniMapa(() => visaoDoMapa.Estado) { X = Pos.AnchorEnd(MiniMapa.LarguraTotal), Y = Pos.Bottom(painelStatus) };
+var painelInventario = new PainelInventario(() => visaoDoMapa.Estado) { Visible = false, X = Pos.Center(), Y = Pos.Center() };
 
 visaoDoMapa.Y = Pos.Bottom(painelStatus);
 visaoDoMapa.Height = Dim.Fill(6);
 
-miniMapa.X = Pos.AnchorEnd(MiniMapa.LarguraTotal);
-miniMapa.Y = Pos.Bottom(painelStatus);
-
-visaoDoMapa.AoAtualizar = () =>
+void AtualizarPaineis()
 {
     painelStatus.SetNeedsDraw();
     painelMensagens.SetNeedsDraw();
     miniMapa.SetNeedsDraw();
+}
+
+visaoDoMapa.AoAtualizar = AtualizarPaineis;
+
+visaoDoMapa.AoAbrirInventario = () =>
+{
+    painelInventario.Visible = true;
+    painelInventario.SetNeedsDraw();
+    painelInventario.SetFocus();
 };
 
-janela.Add(painelStatus);
-janela.Add(visaoDoMapa);
-janela.Add(miniMapa);
-janela.Add(painelMensagens);
+visaoDoMapa.AoAlternarMiniMapa = () =>
+{
+    miniMapa.Visible = !miniMapa.Visible;
+    miniMapa.SetNeedsDraw();
+    visaoDoMapa.SetNeedsDraw();
+};
+
+painelInventario.AoAtualizarOutros = AtualizarPaineis;
+
+painelInventario.AoFechar = () =>
+{
+    painelInventario.Visible = false;
+    visaoDoMapa.SetFocus();
+    AtualizarPaineis();
+};
+
+janela.Add(painelStatus, visaoDoMapa, miniMapa, painelMensagens, painelInventario);
 
 Application.Run(janela);
 Application.Shutdown();
