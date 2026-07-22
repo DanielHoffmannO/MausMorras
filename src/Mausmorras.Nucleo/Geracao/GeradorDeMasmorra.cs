@@ -7,7 +7,7 @@ public sealed class GeradorDeMasmorra
 {
     private static readonly TipoDeCelula[] TemasDeTerreno =
     {
-        TipoDeCelula.Grama, TipoDeCelula.Agua, TipoDeCelula.Entulho, TipoDeCelula.Abismo
+        TipoDeCelula.Grama, TipoDeCelula.Agua, TipoDeCelula.Entulho, TipoDeCelula.Terra
     };
 
     private static readonly Func<Item>[] CatalogoDeItens =
@@ -65,15 +65,56 @@ public sealed class GeradorDeMasmorra
         foreach (var sala in salas)
         {
             EspalharTerreno(mapa, sala, random);
+            EspalharPedras(mapa, sala, random);
             EspalharOuro(mapa, sala, random);
             EspalharItens(mapa, sala, random, itens);
             PosicionarPortas(mapa, sala);
         }
 
         DecorarParedes(mapa, random);
+        GarantirConectividade(mapa, salas, random);
         PosicionarEscada(mapa, salas);
 
         return (mapa, salas, itens);
+    }
+
+    private static void GarantirConectividade(MapaDaMasmorra mapa, List<Sala> salas, Random random)
+    {
+        if (salas.Count == 0)
+            return;
+
+        var alcancaveis = CalcularAlcancaveis(mapa, salas[0].Centro);
+
+        foreach (var sala in salas.Skip(1))
+        {
+            if (alcancaveis.Contains(sala.Centro))
+                continue;
+
+            EscavarCorredor(mapa, sala.Centro, salas[0].Centro, random, 3, permitirEscombros: false);
+            alcancaveis = CalcularAlcancaveis(mapa, salas[0].Centro);
+        }
+    }
+
+    private static HashSet<Posicao> CalcularAlcancaveis(MapaDaMasmorra mapa, Posicao origem)
+    {
+        var visitado = new HashSet<Posicao> { origem };
+        var fila = new Queue<Posicao>();
+        fila.Enqueue(origem);
+
+        while (fila.Count > 0)
+        {
+            var p = fila.Dequeue();
+            foreach (var vizinho in new[] { new Posicao(p.X + 1, p.Y), new Posicao(p.X - 1, p.Y), new Posicao(p.X, p.Y + 1), new Posicao(p.X, p.Y - 1) })
+            {
+                if (visitado.Contains(vizinho) || !mapa.EhCaminhavel(vizinho))
+                    continue;
+
+                visitado.Add(vizinho);
+                fila.Enqueue(vizinho);
+            }
+        }
+
+        return visitado;
     }
 
     private static void EscavarSala(MapaDaMasmorra mapa, Sala sala)
@@ -83,34 +124,43 @@ public sealed class GeradorDeMasmorra
                 mapa[x, y] = TipoDeCelula.Chao;
     }
 
-    private static void EscavarCorredor(MapaDaMasmorra mapa, Posicao de, Posicao para, Random random, int largura)
+    private static void EscavarCorredor(MapaDaMasmorra mapa, Posicao de, Posicao para, Random random, int largura, bool permitirEscombros = true)
     {
         if (random.Next(2) == 0)
         {
-            EscavarHorizontal(mapa, de.X, para.X, de.Y, largura);
-            EscavarVertical(mapa, de.Y, para.Y, para.X, largura);
+            EscavarHorizontal(mapa, de.X, para.X, de.Y, largura, random, permitirEscombros);
+            EscavarVertical(mapa, de.Y, para.Y, para.X, largura, random, permitirEscombros);
         }
         else
         {
-            EscavarVertical(mapa, de.Y, para.Y, de.X, largura);
-            EscavarHorizontal(mapa, de.X, para.X, para.Y, largura);
+            EscavarVertical(mapa, de.Y, para.Y, de.X, largura, random, permitirEscombros);
+            EscavarHorizontal(mapa, de.X, para.X, para.Y, largura, random, permitirEscombros);
         }
     }
 
-    private static void EscavarHorizontal(MapaDaMasmorra mapa, int x1, int x2, int y, int largura)
+    private static void EscavarHorizontal(MapaDaMasmorra mapa, int x1, int x2, int y, int largura, Random random, bool permitirEscombros)
     {
         var metade = largura / 2;
         for (var x = Math.Min(x1, x2); x <= Math.Max(x1, x2); x++)
             for (var oy = -metade; oy < largura - metade; oy++)
-                mapa[x, y + oy] = TipoDeCelula.Chao;
+                mapa[x, y + oy] = EscolherCelulaDoCorredor(oy, random, permitirEscombros);
     }
 
-    private static void EscavarVertical(MapaDaMasmorra mapa, int y1, int y2, int x, int largura)
+    private static void EscavarVertical(MapaDaMasmorra mapa, int y1, int y2, int x, int largura, Random random, bool permitirEscombros)
     {
         var metade = largura / 2;
         for (var y = Math.Min(y1, y2); y <= Math.Max(y1, y2); y++)
             for (var ox = -metade; ox < largura - metade; ox++)
-                mapa[x + ox, y] = TipoDeCelula.Chao;
+                mapa[x + ox, y] = EscolherCelulaDoCorredor(ox, random, permitirEscombros);
+    }
+
+    private static TipoDeCelula EscolherCelulaDoCorredor(int offsetLateral, Random random, bool permitirEscombros)
+    {
+        // a linha central do corredor (offset 0) nunca vira obstáculo, garantindo que o mapa continue sempre conectado
+        if (!permitirEscombros || offsetLateral == 0 || random.NextDouble() > 0.18)
+            return TipoDeCelula.Chao;
+
+        return random.NextDouble() < 0.5 ? TipoDeCelula.Entulho : TipoDeCelula.Pedra;
     }
 
     private static void EspalharTerreno(MapaDaMasmorra mapa, Sala sala, Random random)
@@ -118,14 +168,14 @@ public sealed class GeradorDeMasmorra
         if (sala.Largura <= 2 || sala.Altura <= 2)
             return;
 
-        if (random.NextDouble() > 0.5)
+        if (random.NextDouble() > 0.65)
             return;
 
         var tema = TemasDeTerreno[random.Next(TemasDeTerreno.Length)];
         var densidade = tema switch
         {
             TipoDeCelula.Agua => 0.35,
-            TipoDeCelula.Abismo => 0.15,
+            TipoDeCelula.Terra => 0.45,
             _ => 0.25
         };
 
@@ -136,6 +186,25 @@ public sealed class GeradorDeMasmorra
                 if (mapa[x, y] == TipoDeCelula.Chao && random.NextDouble() < densidade)
                     mapa[x, y] = tema;
             }
+        }
+    }
+
+    private static void EspalharPedras(MapaDaMasmorra mapa, Sala sala, Random random)
+    {
+        if (sala.Largura <= 2 || sala.Altura <= 2)
+            return;
+
+        if (random.NextDouble() > 0.4)
+            return;
+
+        var quantidadePedras = random.Next(1, 5);
+        for (var i = 0; i < quantidadePedras; i++)
+        {
+            var x = random.Next(sala.X + 1, sala.X + sala.Largura - 1);
+            var y = random.Next(sala.Y + 1, sala.Y + sala.Altura - 1);
+
+            if (mapa[x, y] == TipoDeCelula.Chao)
+                mapa[x, y] = TipoDeCelula.Pedra;
         }
     }
 

@@ -10,7 +10,8 @@ public enum TipoDeCelula
     Grama,
     Agua,
     Entulho,
-    Abismo,
     Ouro,
-    Item
+    Item,
+    Terra,
+    Pedra
 }

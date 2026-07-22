@@ -12,8 +12,6 @@ public sealed class EstadoDoJogo
     private const int RaioDeVisao = 10;
     private const int MaximoDeMensagens = 200;
     private const int OuroPorPilha = 10;
-    private const int DanoMinimoAbismo = 2;
-    private const int DanoMaximoAbismo = 5;
 
     private readonly List<string> _mensagens = new();
     private Dictionary<Posicao, Item> _itensNoChao = new();
@@ -73,10 +71,6 @@ public sealed class EstadoDoJogo
 
             case TipoDeCelula.Item:
                 ColetarItem(alvo);
-                break;
-
-            case TipoDeCelula.Abismo:
-                CairNoAbismo();
                 break;
 
             case TipoDeCelula.Escada:
@@ -260,17 +254,6 @@ public sealed class EstadoDoJogo
         AdicionarMensagem(curado > 0
             ? $"Você usa {item.Nome} e recupera {curado} de vida."
             : $"Você usa {item.Nome}, mas já estava com a vida cheia.");
-    }
-
-    private void CairNoAbismo()
-    {
-        var danoBase = _random.Next(DanoMinimoAbismo, DanoMaximoAbismo + 1);
-        var dano = Math.Max(1, danoBase - Jogador.DefesaTotal);
-        Jogador.Vida = Math.Max(0, Jogador.Vida - dano);
-        AdicionarMensagem($"Você cai num abismo e se machuca! (-{dano} vida)");
-
-        if (Morto)
-            AdicionarMensagem("Você morreu na masmorra...");
     }
 
     private void AtualizarVisibilidade()

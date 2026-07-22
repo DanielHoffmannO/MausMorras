@@ -36,9 +36,10 @@ public sealed class VisaoDoMapa : View
         TipoDeCelula.Grama => (new Rune(','), Cores.Grama),
         TipoDeCelula.Agua => (new Rune('~'), Cores.Agua),
         TipoDeCelula.Entulho => (new Rune(':'), Cores.Entulho),
-        TipoDeCelula.Abismo => (new Rune(' '), Cores.Abismo),
         TipoDeCelula.Ouro => (new Rune('$'), Cores.Ouro),
         TipoDeCelula.Item => (new Rune('!'), Cores.Item),
+        TipoDeCelula.Terra => (new Rune('"'), Cores.Terra),
+        TipoDeCelula.Pedra => (new Rune('o'), Cores.Pedra),
         _ => (new Rune('?'), Cores.Perigo)
     };
 

@@ -11,9 +11,10 @@ internal static class Cores
     public static readonly Color Grama = new("#6a9b5e");
     public static readonly Color Agua = new("#3f6ea0");
     public static readonly Color Entulho = new("#9c8a5e");
-    public static readonly Color Abismo = new("#020203");
     public static readonly Color Ouro = new("#d4af37");
     public static readonly Color Item = new("#b57edc");
+    public static readonly Color Terra = new("#6b4630");
+    public static readonly Color Pedra = new("#8c8478");
     public static readonly Color Jogador = new("#f2d675");
     public static readonly Color TextoPrincipal = new("#e8e2d0");
     public static readonly Color TextoSecundario = new("#9a9488");
