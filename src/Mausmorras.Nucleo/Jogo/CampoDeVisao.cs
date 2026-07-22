@@ -6,7 +6,8 @@ public static class CampoDeVisao
 {
     public static HashSet<Posicao> Calcular(MapaDaMasmorra mapa, Posicao origem, int raio)
     {
-        var visiveis = new HashSet<Posicao> { origem };
+        var ladoDaAreaDeBusca = raio * 2 + 1;
+        var visiveis = new HashSet<Posicao>(ladoDaAreaDeBusca * ladoDaAreaDeBusca) { origem };
         var raioAoQuadrado = raio * raio;
 
         for (var y = origem.Y - raio; y <= origem.Y + raio; y++)

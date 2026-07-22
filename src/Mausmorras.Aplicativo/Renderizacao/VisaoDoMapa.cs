@@ -7,9 +7,12 @@ namespace Mausmorras.Aplicativo.Renderizacao;
 public sealed class VisaoDoMapa : View
 {
     private const double IntensidadeEscurecimento = 0.55;
+    private static readonly TimeSpan JanelaDeCliqueDuplo = TimeSpan.FromMilliseconds(400);
 
     private readonly string _caminhoDoSave;
     private EstadoDoJogo _estado;
+    private bool _previaAtiva;
+    private DateTime _ultimoCliqueDoC;
 
     public Action? AoAtualizar { get; set; }
     public Action? AoAbrirInventario { get; set; }
@@ -74,17 +77,45 @@ public sealed class VisaoDoMapa : View
                     continue;
 
                 var (glifo, corFrente) = ObterVisualDaCelula(mapa[mapaX, mapaY]);
-                var visivel = _estado.CelulasVisiveis.Contains(new Posicao(mapaX, mapaY));
+                var visivel = _estado.TodosVisiveis || _estado.CelulasVisiveis.Contains(new Posicao(mapaX, mapaY));
 
                 SetAttribute(new Attribute(visivel ? corFrente : corFrente.GetDimmerColor(IntensidadeEscurecimento), Cores.Fundo));
                 AddRune(telaX, telaY, glifo);
             }
         }
 
+        if (_estado.LocalAtual == TipoDeLocal.Vila && _previaAtiva)
+            DesenharPreviaDeConstrucao(mapa, camX, camY, viewport);
+
         SetAttribute(new Attribute(Cores.Jogador, Cores.Fundo));
         AddRune(jogador.X - camX, jogador.Y - camY, new Rune('@'));
 
         return true;
+    }
+
+    private void DesenharPreviaDeConstrucao(MapaDaMasmorra mapa, int camX, int camY, System.Drawing.Rectangle viewport)
+    {
+        var (area, portaExterna, valida) = _estado.ObterPreviaDeConstrucao();
+        var corFundoPrevia = valida ? Cores.PreviaValida : Cores.PreviaInvalida;
+
+        DesenharCelulaComPrevia(mapa, portaExterna.X, portaExterna.Y, camX, camY, viewport, corFundoPrevia);
+
+        for (var x = area.X; x < area.X + area.Largura; x++)
+            for (var y = area.Y; y < area.Y + area.Altura; y++)
+                DesenharCelulaComPrevia(mapa, x, y, camX, camY, viewport, corFundoPrevia);
+    }
+
+    private void DesenharCelulaComPrevia(MapaDaMasmorra mapa, int x, int y, int camX, int camY, System.Drawing.Rectangle viewport, Color corFundoPrevia)
+    {
+        var telaX = x - camX;
+        var telaY = y - camY;
+
+        if (telaX < 0 || telaX >= viewport.Width || telaY < 0 || telaY >= viewport.Height || !mapa.FoiExplorada(x, y))
+            return;
+
+        var (glifo, corFrente) = ObterVisualDaCelula(mapa[x, y]);
+        SetAttribute(new Attribute(corFrente, corFundoPrevia));
+        AddRune(telaX, telaY, glifo);
     }
 
     protected override bool OnKeyDown(Key key)
@@ -129,9 +160,7 @@ public sealed class VisaoDoMapa : View
 
         if (key.AsRune.Value is 'c' or 'C')
         {
-            _estado.TentarConstruir();
-            SetNeedsDraw();
-            AoAtualizar?.Invoke();
+            AlternarOuConstruir();
             return true;
         }
 
@@ -152,6 +181,30 @@ public sealed class VisaoDoMapa : View
         }
 
         return base.OnKeyDown(key);
+    }
+
+    private void AlternarOuConstruir()
+    {
+        var agora = DateTime.UtcNow;
+        var cliqueDuplo = _previaAtiva && agora - _ultimoCliqueDoC <= JanelaDeCliqueDuplo;
+
+        if (cliqueDuplo)
+        {
+            _previaAtiva = false;
+        }
+        else if (_previaAtiva)
+        {
+            _estado.TentarConstruir();
+            _previaAtiva = false;
+        }
+        else
+        {
+            _previaAtiva = true;
+        }
+
+        _ultimoCliqueDoC = agora;
+        SetNeedsDraw();
+        AoAtualizar?.Invoke();
     }
 
     private bool TratarTeclasDeLetra(Key key) => key.AsRune.Value switch

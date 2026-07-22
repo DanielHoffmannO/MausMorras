@@ -18,6 +18,7 @@ public sealed class EstadoDoJogo
     private const int RaioDeVisaoNoiteNaVila = 6;
     private const int MadeiraPorArvore = 5;
     private const int TamanhoDaCasa = 5;
+    private const int DistanciaDaCasaAoJogador = 2; // 1 bloco de folga + a parede da casa
     private const double ChanceDeRebrotaPorCelula = 0.01;
 
     private readonly List<string> _mensagens = new();
@@ -26,6 +27,7 @@ public sealed class EstadoDoJogo
     private IReadOnlyList<Sala> _salasDaVila = Array.Empty<Sala>();
     private Posicao _ultimaDirecao = Direcao.Sul;
     private int _turno;
+    private bool _vilaTotalmenteExplorada;
 
     private int _largura;
     private int _altura;
@@ -37,6 +39,7 @@ public sealed class EstadoDoJogo
     public int Andar { get; private set; } = 1;
     public TipoDeLocal LocalAtual => Andar == 0 ? TipoDeLocal.Vila : TipoDeLocal.Masmorra;
     public IReadOnlySet<Posicao> CelulasVisiveis { get; private set; } = new HashSet<Posicao>();
+    public bool TodosVisiveis { get; private set; }
     public IReadOnlyList<string> Mensagens => _mensagens;
     public bool Morto => Jogador.Vida <= 0;
     public int Turno => _turno;
@@ -117,8 +120,9 @@ public sealed class EstadoDoJogo
             return false;
 
         var area = CalcularAreaDaCasa(Jogador.Posicao, _ultimaDirecao);
+        var portaExterna = CalcularPosicaoNaDirecao(Jogador.Posicao, _ultimaDirecao, 1);
 
-        if (!AreaLivreParaConstrucao(area))
+        if (!AreaLivreParaConstrucao(area) || !TerrenoConstruivel(portaExterna))
         {
             AdicionarMensagem("Não há espaço livre suficiente para construir aqui.");
             return false;
@@ -131,11 +135,21 @@ public sealed class EstadoDoJogo
             return false;
         }
 
-        ConstruirCasa(area, Jogador.Posicao + _ultimaDirecao);
+        var portaNaParede = CalcularPosicaoNaDirecao(Jogador.Posicao, _ultimaDirecao, DistanciaDaCasaAoJogador);
+        ConstruirCasa(area, portaNaParede, portaExterna);
         Jogador.Madeira -= custo;
         AdicionarMensagem("Você constrói uma casa.");
         AvancarTurno();
         return true;
+    }
+
+    public (Sala Area, Posicao PortaExterna, bool Valida) ObterPreviaDeConstrucao()
+    {
+        var area = CalcularAreaDaCasa(Jogador.Posicao, _ultimaDirecao);
+        var portaExterna = CalcularPosicaoNaDirecao(Jogador.Posicao, _ultimaDirecao, 1);
+        var custo = area.Largura * area.Altura;
+        var valida = LocalAtual == TipoDeLocal.Vila && AreaLivreParaConstrucao(area) && TerrenoConstruivel(portaExterna) && Jogador.Madeira >= custo;
+        return (area, portaExterna, valida);
     }
 
     private static Sala CalcularAreaDaCasa(Posicao jogador, Posicao direcao)
@@ -143,28 +157,34 @@ public sealed class EstadoDoJogo
         var metade = TamanhoDaCasa / 2;
 
         if (direcao == Direcao.Sul)
-            return new Sala(jogador.X - metade, jogador.Y + 1, TamanhoDaCasa, TamanhoDaCasa);
+            return new Sala(jogador.X - metade, jogador.Y + DistanciaDaCasaAoJogador, TamanhoDaCasa, TamanhoDaCasa);
 
         if (direcao == Direcao.Norte)
-            return new Sala(jogador.X - metade, jogador.Y - TamanhoDaCasa, TamanhoDaCasa, TamanhoDaCasa);
+            return new Sala(jogador.X - metade, jogador.Y - DistanciaDaCasaAoJogador - TamanhoDaCasa + 1, TamanhoDaCasa, TamanhoDaCasa);
 
         if (direcao == Direcao.Leste)
-            return new Sala(jogador.X + 1, jogador.Y - metade, TamanhoDaCasa, TamanhoDaCasa);
+            return new Sala(jogador.X + DistanciaDaCasaAoJogador, jogador.Y - metade, TamanhoDaCasa, TamanhoDaCasa);
 
-        return new Sala(jogador.X - TamanhoDaCasa, jogador.Y - metade, TamanhoDaCasa, TamanhoDaCasa);
+        return new Sala(jogador.X - DistanciaDaCasaAoJogador - TamanhoDaCasa + 1, jogador.Y - metade, TamanhoDaCasa, TamanhoDaCasa);
     }
+
+    private static Posicao CalcularPosicaoNaDirecao(Posicao jogador, Posicao direcao, int distancia) =>
+        new(jogador.X + direcao.X * distancia, jogador.Y + direcao.Y * distancia);
 
     private bool AreaLivreParaConstrucao(Sala area)
     {
         for (var x = area.X; x < area.X + area.Largura; x++)
             for (var y = area.Y; y < area.Y + area.Altura; y++)
-                if (!Mapa.DentroDosLimites(x, y) || Mapa[x, y] != TipoDeCelula.Grama)
+                if (!TerrenoConstruivel(new Posicao(x, y)))
                     return false;
 
         return true;
     }
 
-    private void ConstruirCasa(Sala area, Posicao porta)
+    private bool TerrenoConstruivel(Posicao p) =>
+        Mapa.DentroDosLimites(p.X, p.Y) && Mapa[p.X, p.Y] is TipoDeCelula.Grama or TipoDeCelula.Chao;
+
+    private void ConstruirCasa(Sala area, Posicao portaNaParede, Posicao portaExterna)
     {
         for (var x = area.X; x < area.X + area.Largura; x++)
             for (var y = area.Y; y < area.Y + area.Altura; y++)
@@ -174,7 +194,8 @@ public sealed class EstadoDoJogo
             for (var y = area.Y + 1; y < area.Y + area.Altura - 1; y++)
                 Mapa[x, y] = TipoDeCelula.Chao;
 
-        Mapa[porta.X, porta.Y] = TipoDeCelula.Porta;
+        Mapa[portaNaParede.X, portaNaParede.Y] = TipoDeCelula.Porta;
+        Mapa[portaExterna.X, portaExterna.Y] = TipoDeCelula.Porta;
     }
 
     public void AcionarItemDaMochila(int indice)
@@ -434,21 +455,23 @@ public sealed class EstadoDoJogo
     {
         if (LocalAtual == TipoDeLocal.Vila && EhDia)
         {
-            var visiveis = new HashSet<Posicao>();
-            for (var x = 0; x < Mapa.Largura; x++)
+            TodosVisiveis = true;
+
+            // a exploração é permanente: só precisamos marcar o mapa inteiro uma única vez,
+            // não a cada passo — daí em diante isso vira um no-op O(1).
+            if (!_vilaTotalmenteExplorada)
             {
-                for (var y = 0; y < Mapa.Altura; y++)
-                {
-                    var posicao = new Posicao(x, y);
-                    visiveis.Add(posicao);
-                    Mapa.MarcarExplorada(x, y);
-                }
+                for (var x = 0; x < Mapa.Largura; x++)
+                    for (var y = 0; y < Mapa.Altura; y++)
+                        Mapa.MarcarExplorada(x, y);
+
+                _vilaTotalmenteExplorada = true;
             }
 
-            CelulasVisiveis = visiveis;
             return;
         }
 
+        TodosVisiveis = false;
         var raio = LocalAtual == TipoDeLocal.Vila ? RaioDeVisaoNoiteNaVila : RaioDeVisao;
         CelulasVisiveis = CampoDeVisao.Calcular(Mapa, Jogador.Posicao, raio);
         foreach (var celula in CelulasVisiveis)
