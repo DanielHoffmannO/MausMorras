@@ -20,5 +20,7 @@ public enum TipoDeCelula
     SaidaParaVila,
     PisoDaCasa,
     Fogueira,
-    ArvoreFrutifera
+    ArvoreFrutifera,
+    Cama,
+    Bau
 }

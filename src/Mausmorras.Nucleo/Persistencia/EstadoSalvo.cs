@@ -37,6 +37,7 @@ public sealed class EstadoSalvo
     public List<FogueiraAtivaSalva> FogueirasAtivas { get; set; } = new();
     public bool PrimeiroAbrigoConstruido { get; set; }
     public List<ColheitaPendenteSalva> ColheitasPendentes { get; set; } = new();
+    public List<ItemSalvo> Bau { get; set; } = new();
 }
 
 public sealed class PersonagemSalvo

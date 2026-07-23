@@ -30,7 +30,8 @@ public sealed partial class EstadoDoJogo
             Bichos = _bichos.Select(b => new BichoSalvo { X = b.Posicao.X, Y = b.Posicao.Y }).ToList(),
             FogueirasAtivas = _fogueirasAtivas.Select(f => new FogueiraAtivaSalva { X = f.Posicao.X, Y = f.Posicao.Y, TurnoDeExpiracao = f.TurnoDeExpiracao }).ToList(),
             PrimeiroAbrigoConstruido = _primeiroAbrigoConstruido,
-            ColheitasPendentes = _proximaColheitaDisponivel.Select(kv => new ColheitaPendenteSalva { X = kv.Key.X, Y = kv.Key.Y, TurnoDisponivel = kv.Value }).ToList()
+            ColheitasPendentes = _proximaColheitaDisponivel.Select(kv => new ColheitaPendenteSalva { X = kv.Key.X, Y = kv.Key.Y, TurnoDisponivel = kv.Value }).ToList(),
+            Bau = _bau.Select(ParaSalvo).ToList()
         };
 
         for (var x = 0; x < Mapa.Largura; x++)
@@ -137,6 +138,8 @@ public sealed partial class EstadoDoJogo
 
             foreach (var c in dto.ColheitasPendentes)
                 estado._proximaColheitaDisponivel[new Posicao(c.X, c.Y)] = c.TurnoDisponivel;
+
+            estado._bau.AddRange(dto.Bau.Select(DeSalvo));
         }
 
         estado._mensagens.AddRange(dto.Mensagens);

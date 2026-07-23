@@ -82,6 +82,8 @@ public sealed class VisaoDoMapa : View
         [TipoDeCelula.PisoDaCasa] = (new Rune('.'), Cores.Casa),
         [TipoDeCelula.Fogueira] = (new Rune('^'), Cores.Fogueira),
         [TipoDeCelula.ArvoreFrutifera] = (new Rune('♣'), Cores.ArvoreFrutifera),
+        [TipoDeCelula.Cama] = (new Rune('z'), Cores.Cama),
+        [TipoDeCelula.Bau] = (new Rune('b'), Cores.Bau),
     };
 
     private static (Rune Glifo, Color CorFrente) ObterVisualDaCelula(TipoDeCelula celula) =>

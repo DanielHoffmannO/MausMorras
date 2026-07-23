@@ -5,7 +5,7 @@ namespace Mausmorras.Aplicativo.Renderizacao;
 
 public sealed class PainelInventario : PainelDeEstado
 {
-    private const int LarguraInterna = 62;
+    private const int LarguraInterna = 96;
     private const int AlturaInterna = 22;
     private const int LarguraColuna = 28;
 
@@ -26,12 +26,14 @@ public sealed class PainelInventario : PainelDeEstado
     private enum Coluna
     {
         Equipamento,
-        Mochila
+        Mochila,
+        Bau
     }
 
     private Coluna _coluna = Coluna.Equipamento;
     private int _indiceEquipamento;
     private int _indiceMochila;
+    private int _indiceBau;
 
     private readonly Dictionary<KeyCode, Action<EstadoDoJogo>> _acoesPorTecla;
     private readonly Dictionary<char, Action<EstadoDoJogo>> _acoesPorLetra;
@@ -59,6 +61,7 @@ public sealed class PainelInventario : PainelDeEstado
         {
             ['i'] = _ => Fechar(),
             ['x'] = Descartar,
+            ['b'] = MoverParaOBau,
         };
     }
 
@@ -71,6 +74,7 @@ public sealed class PainelInventario : PainelDeEstado
         SetAttribute(new Attribute(Cores.TextoPrincipal, Cores.Fundo));
         AddStr(2, 1, "Equipamento");
         AddStr(34, 1, "Mochila");
+        AddStr(66, 1, "Baú (compartilhado)");
 
         for (var i = 0; i < SlotsEquipamento.Length; i++)
         {
@@ -99,8 +103,22 @@ public sealed class PainelInventario : PainelDeEstado
             }
         }
 
+        if (estado.Bau.Count == 0)
+        {
+            SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
+            AddStr(66, 3, "(vazio)");
+        }
+        else
+        {
+            for (var i = 0; i < estado.Bau.Count && i < AlturaInterna - 6; i++)
+            {
+                var texto = $"{i + 1}) {estado.Bau[i].Nome}";
+                DesenharLinha(66, 3 + i, texto, _coluna == Coluna.Bau && _indiceBau == i);
+            }
+        }
+
         SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
-        AddStr(2, AlturaInterna - 2, "Tab troca coluna   Setas navega   Enter equipa/usa");
+        AddStr(2, AlturaInterna - 2, "Tab troca coluna   Setas navega   Enter equipa/usa/retira do baú   B guarda no baú");
         AddStr(2, AlturaInterna - 1, "Del joga no lixo   I ou Esc fecha");
     }
 
@@ -139,7 +157,12 @@ public sealed class PainelInventario : PainelDeEstado
 
     private void TrocarColuna()
     {
-        _coluna = _coluna == Coluna.Equipamento ? Coluna.Mochila : Coluna.Equipamento;
+        _coluna = _coluna switch
+        {
+            Coluna.Equipamento => Coluna.Mochila,
+            Coluna.Mochila => Coluna.Bau,
+            _ => Coluna.Equipamento
+        };
         SetNeedsDraw();
     }
 
@@ -149,11 +172,17 @@ public sealed class PainelInventario : PainelDeEstado
         {
             _indiceEquipamento = Math.Clamp(_indiceEquipamento + delta, 0, SlotsEquipamento.Length - 1);
         }
-        else
+        else if (_coluna == Coluna.Mochila)
         {
             var quantidade = estado.Personagem.Mochila.Count;
             if (quantidade > 0)
                 _indiceMochila = Math.Clamp(_indiceMochila + delta, 0, quantidade - 1);
+        }
+        else
+        {
+            var quantidade = estado.Bau.Count;
+            if (quantidade > 0)
+                _indiceBau = Math.Clamp(_indiceBau + delta, 0, quantidade - 1);
         }
 
         SetNeedsDraw();
@@ -166,7 +195,23 @@ public sealed class PainelInventario : PainelDeEstado
             estado.AcionarItemDaMochila(_indiceMochila);
             _indiceMochila = Math.Clamp(_indiceMochila, 0, Math.Max(0, estado.Personagem.Mochila.Count - 1));
         }
+        else if (_coluna == Coluna.Bau && _indiceBau < estado.Bau.Count)
+        {
+            estado.RetirarDoBau(_indiceBau);
+            _indiceBau = Math.Clamp(_indiceBau, 0, Math.Max(0, estado.Bau.Count - 1));
+        }
 
+        SetNeedsDraw();
+        AoAtualizarOutros?.Invoke();
+    }
+
+    private void MoverParaOBau(EstadoDoJogo estado)
+    {
+        if (_coluna != Coluna.Mochila || _indiceMochila >= estado.Personagem.Mochila.Count)
+            return;
+
+        estado.DepositarNoBau(_indiceMochila);
+        _indiceMochila = Math.Clamp(_indiceMochila, 0, Math.Max(0, estado.Personagem.Mochila.Count - 1));
         SetNeedsDraw();
         AoAtualizarOutros?.Invoke();
     }
@@ -177,7 +222,7 @@ public sealed class PainelInventario : PainelDeEstado
         {
             estado.DescartarEquipado(SlotsEquipamento[_indiceEquipamento]);
         }
-        else if (_indiceMochila < estado.Personagem.Mochila.Count)
+        else if (_coluna == Coluna.Mochila && _indiceMochila < estado.Personagem.Mochila.Count)
         {
             estado.DescartarDaMochila(_indiceMochila);
             _indiceMochila = Math.Clamp(_indiceMochila, 0, Math.Max(0, estado.Personagem.Mochila.Count - 1));

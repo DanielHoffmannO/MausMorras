@@ -58,6 +58,28 @@ public sealed partial class EstadoDoJogo
         AdicionarMensagem($"Você joga {item.Nome} no lixo.");
     }
 
+    public void DepositarNoBau(int indice)
+    {
+        if (indice < 0 || indice >= Personagem.Mochila.Count)
+            return;
+
+        var item = Personagem.Mochila[indice];
+        Personagem.Mochila.RemoveAt(indice);
+        _bau.Add(item);
+        AdicionarMensagem($"Você guarda {item.Nome} no baú.");
+    }
+
+    public void RetirarDoBau(int indice)
+    {
+        if (indice < 0 || indice >= _bau.Count)
+            return;
+
+        var item = _bau[indice];
+        _bau.RemoveAt(indice);
+        Personagem.Mochila.Add(item);
+        AdicionarMensagem($"Você retira {item.Nome} do baú.");
+    }
+
     private void UsarConsumivel(Item item)
     {
         var antes = Personagem.Vida;

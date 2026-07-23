@@ -20,16 +20,15 @@ public sealed partial class EstadoDoJogo
             return false;
         }
 
-        var custo = area.Largura * area.Altura;
-        if (Madeira < custo)
+        if (Madeira < CustoDaCasa)
         {
-            AdicionarMensagem($"Madeira insuficiente para construir (precisa de {custo}).");
+            AdicionarMensagem($"Madeira insuficiente para construir (precisa de {CustoDaCasa}).");
             return false;
         }
 
         var portaNaParede = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, DistanciaDaCasaAoPersonagem);
         ConstruirCasa(Mapa, area, portaNaParede, portaExterna);
-        Madeira -= custo;
+        Madeira -= CustoDaCasa;
         AdicionarMensagem("Você constrói uma casa.");
         FalarSobre(Personagem, "casa");
         AvancarTurno();
@@ -40,9 +39,8 @@ public sealed partial class EstadoDoJogo
     {
         var area = CalcularAreaDaCasa(Personagem.Posicao, _ultimaDirecao);
         var portaExterna = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, 1);
-        var custo = area.Largura * area.Altura;
         var valida = LocalAtual == TipoDeLocal.Vila && AreaLivreParaConstrucao(Mapa, area) && TerrenoConstruivel(Mapa, portaExterna)
-                     && Madeira >= custo && AreaLivreDePersonagens(area, portaExterna, Personagem);
+                     && Madeira >= CustoDaCasa && AreaLivreDePersonagens(area, portaExterna, Personagem);
         return (area, portaExterna, valida);
     }
 
@@ -94,6 +92,9 @@ public sealed partial class EstadoDoJogo
         for (var x = area.X + 1; x < area.X + area.Largura - 1; x++)
             for (var y = area.Y + 1; y < area.Y + area.Altura - 1; y++)
                 mapa[x, y] = TipoDeCelula.PisoDaCasa;
+
+        mapa[area.X + 1, area.Y + 1] = TipoDeCelula.Cama;
+        mapa[area.X + area.Largura - 2, area.Y + 1] = TipoDeCelula.Bau;
 
         mapa[portaNaParede.X, portaNaParede.Y] = TipoDeCelula.Porta;
         mapa[portaExterna.X, portaExterna.Y] = TipoDeCelula.Porta;

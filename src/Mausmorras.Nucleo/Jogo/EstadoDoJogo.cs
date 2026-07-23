@@ -16,6 +16,8 @@ public sealed partial class EstadoDoJogo
     private const int RaioDeVisaoNoiteNaVila = 6;
     private const int MadeiraPorArvore = 5;
     private const int TamanhoDaCasa = 5;
+    private const int CustoDaMobilia = 5; // cama + bau
+    private const int CustoDaCasa = TamanhoDaCasa * TamanhoDaCasa + CustoDaMobilia; // 25 + 5 = 30
     private const int DistanciaDaCasaAoPersonagem = 2; // 1 bloco de folga + a parede da casa
     private const double ChanceDeRebrotaPorCelula = 0.01;
     public const int FomeMaxima = 300; // ~2,5 dias de jogo (1 dia = 120 turnos)
@@ -42,7 +44,9 @@ public sealed partial class EstadoDoJogo
     private const int SonoPorTurno = 1;
     private const int DanoPorSonoMaximo = 1;
     private const double LimiarSonoParaDormir = 0.2; // era 0.35 -- mais baixo que fome/frio de proposito, ja que dormir so alivia em casa, sem equivalente portatil tipo a fogueira, entao precisa de mais folga pra caminhada de volta
-    private const int AlivioDoSonoAoDescansar = 5;
+    private const int AlivioDoSonoDiurno = 3; // dormir de dia ainda ajuda, mas bem menos que de noite
+    private const int AlivioDoSonoNoturno = 8; // dormir de noite e o que realmente recupera o sono
+    private const int EstoqueDeComidaParaCompartilhar = 2; // a partir de quantos itens de comida o cacador comeca a repassar pro outro
     private const int VidaMaximaMinimaFundador = 22; // era 18 -- mais margem de sobrevivencia
     private const int VidaMaximaMaximaFundador = 28; // era 22
     private const double LimiarFomeParaBuscarComida = 0.35; // era 0.5 -- age mais cedo, sobra mais tempo de volta
@@ -59,6 +63,7 @@ public sealed partial class EstadoDoJogo
     private readonly List<string> _mensagens = new();
     private readonly List<string> _conversas = new();
     private Dictionary<Posicao, Item> _itensNoChao = new();
+    private readonly List<Item> _bau = new();
     private MapaDaMasmorra? _mapaDaVila;
     private IReadOnlyList<Sala> _salasDaVila = Array.Empty<Sala>();
     private Posicao _ultimaDirecao = Direcao.Sul;
@@ -92,6 +97,7 @@ public sealed partial class EstadoDoJogo
     public bool TodosVisiveis { get; private set; }
     public IReadOnlyList<string> Mensagens => _mensagens;
     public IReadOnlyList<string> Conversas => _conversas;
+    public IReadOnlyList<Item> Bau => _bau;
     public bool Morto => Personagem.Vida <= 0;
     public int Turno => _turno;
     public bool EhDia => (_turno / TurnosPorMetadeDoDia) % 2 == 0;
@@ -235,7 +241,7 @@ public sealed partial class EstadoDoJogo
         if (EstaPertoDeFogueira(mapaRelevante, p.Posicao))
             return TemperaturaAmbienteFogueira;
 
-        if (mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.PisoDaCasa)
+        if (mapaRelevante[p.Posicao.X, p.Posicao.Y] is TipoDeCelula.PisoDaCasa or TipoDeCelula.Cama or TipoDeCelula.Bau)
             return TemperaturaAmbienteCasa;
 
         return ambienteBase;
@@ -322,7 +328,7 @@ public sealed partial class EstadoDoJogo
                 // quem estivesse economizando pra casa desviaria a madeira acumulada pra reconstruir
                 // a fogueira de novo, e a casa nunca teria a chance de juntar os 25 necessarios
                 if (_primeiroAbrigoConstruido)
-                    TentarObterMadeira(p, TamanhoDaCasa * TamanhoDaCasa, TentarConstruirAutonomamente);
+                    TentarObterMadeira(p, CustoDaCasa, TentarConstruirAutonomamente);
                 else
                     TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
             }
@@ -404,6 +410,26 @@ public sealed partial class EstadoDoJogo
 
     private void TentarCacarPreventivamente(Personagem p)
     {
+        // "previsao de futuro": nao basta cacar so pra si -- se ja tem comida de sobra (mais do
+        // que o outro), vale mais repassar agora, enquanto o outro ainda nao esta com fome, do
+        // que so ir empilhando na propria mochila
+        var outro = _personagens.FirstOrDefault(o => !ReferenceEquals(o, p) && o.Vida > 0 && EstaNaVila(o));
+        if (outro is not null && ContarComida(p) >= EstoqueDeComidaParaCompartilhar && ContarComida(p) > ContarComida(outro))
+        {
+            if (EstaAdjacente(p.Posicao, outro.Posicao))
+            {
+                DarComida(p, outro);
+                return;
+            }
+
+            var passoAteOutro = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => pos == outro.Posicao);
+            if (passoAteOutro is { } destinoOutro)
+            {
+                p.Posicao = destinoOutro;
+                return;
+            }
+        }
+
         var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(p.Posicao);
         if (arvoreFrutiferaAdjacente is { } arvoreFruta)
         {
@@ -415,6 +441,25 @@ public sealed partial class EstadoDoJogo
         if (passo is { } destino)
             p.Posicao = destino;
     }
+
+    private static int ContarComida(Personagem p) => p.Mochila.Count(it => it.Tipo == TipoDeItem.Comida);
+
+    private static bool EstaAdjacente(Posicao a, Posicao b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y) <= 1;
+
+    private void DarComida(Personagem doador, Personagem receptor)
+    {
+        var comida = doador.Mochila.FirstOrDefault(it => it.Tipo == TipoDeItem.Comida);
+        if (comida is null)
+            return;
+
+        doador.Mochila.Remove(comida);
+        receptor.Mochila.Add(comida);
+        AdicionarMensagem($"{NomeDoAtor(doador)} dá {comida.Nome} {ParaQuem(receptor)}.");
+        FalarSobre(doador, "comida_dada");
+    }
+
+    private string ParaQuem(Personagem p) =>
+        ReferenceEquals(p, Personagem) ? "para você" : $"para a Pessoa {_personagens.IndexOf(p) + 1}";
 
     private void TentarBuscarAbrigo(Personagem p)
     {
@@ -440,12 +485,13 @@ public sealed partial class EstadoDoJogo
         if (mapaRelevante is null)
             return false;
 
-        return EstaPertoDeFogueira(mapaRelevante, p.Posicao) || mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.PisoDaCasa;
+        return EstaPertoDeFogueira(mapaRelevante, p.Posicao) ||
+            mapaRelevante[p.Posicao.X, p.Posicao.Y] is TipoDeCelula.PisoDaCasa or TipoDeCelula.Cama or TipoDeCelula.Bau;
     }
 
     private void TentarDormir(Personagem p)
     {
-        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa);
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.Cama);
         if (passo is { } destino)
             p.Posicao = destino;
     }
@@ -538,7 +584,7 @@ public sealed partial class EstadoDoJogo
                 continue;
 
             ConstruirCasa(_mapaDaVila!, area, portaNaParede, portaExterna);
-            Madeira -= TamanhoDaCasa * TamanhoDaCasa;
+            Madeira -= CustoDaCasa;
             AdicionarMensagem($"{NomeDoAtor(p)} constrói uma casa.");
             FalarSobre(p, "casa");
             return;
@@ -640,12 +686,12 @@ public sealed partial class EstadoDoJogo
         }
     }
 
-    private int AlivioDoSono(Personagem p) => EstaDescansando(p) ? AlivioDoSonoAoDescansar : 0;
+    private int AlivioDoSono(Personagem p) => EstaDescansando(p) ? (EhDia ? AlivioDoSonoDiurno : AlivioDoSonoNoturno) : 0;
 
     private bool EstaDescansando(Personagem p)
     {
         var mapaRelevante = ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
-        return mapaRelevante is not null && mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.PisoDaCasa;
+        return mapaRelevante is not null && mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.Cama;
     }
 
     private void AtualizarNecessidade(Func<Personagem, int> obter, Action<Personagem, int> definir, int maximo, int incremento, int dano, string mensagemNoMaximo, string mensagemDeMorte, Func<Personagem, int>? alivio = null)
@@ -748,6 +794,7 @@ public sealed partial class EstadoDoJogo
         ["comida"] = new[] { "Ufa, já estou bem melhor.", "Isso mata a fome por um bom tempo." },
         ["casa"] = new[] { "Agora sim, um lar de verdade.", "Isso vai nos proteger bem melhor." },
         ["fogueira"] = new[] { "Essa fogueira vai esquentar a gente direitinho.", "Um pouco de calor já ajuda bastante." },
+        ["comida_dada"] = new[] { "Toma, guarda isso pra você.", "Toma, você também deve estar com fome." },
     };
 
     private void FalarSobre(Personagem p, string evento)
