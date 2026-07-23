@@ -44,9 +44,9 @@ public sealed class MiniMapa : PainelDeEstado
         }
 
         foreach (var p in estado.PersonagensNoLocalAtual.Where(p => !ReferenceEquals(p, estado.Personagem)))
-            DesenharMarcador(p, Cores.TextoSecundario, escalaX, escalaY);
+            DesenharMarcador(p, p.Vida <= 0 ? Cores.TextoSecundario : Cores.PersonagemVivo, escalaX, escalaY);
 
-        DesenharMarcador(estado.Personagem, Cores.Personagem, escalaX, escalaY);
+        DesenharMarcador(estado.Personagem, estado.Personagem.Vida <= 0 ? Cores.TextoSecundario : Cores.Personagem, escalaX, escalaY);
     }
 
     private void DesenharMarcador(Personagem personagem, Color cor, double escalaX, double escalaY)

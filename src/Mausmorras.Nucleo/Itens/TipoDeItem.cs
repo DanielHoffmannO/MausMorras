@@ -6,5 +6,6 @@ public enum TipoDeItem
     Peitoral,
     Pernas,
     Botas,
-    Generico
+    Generico,
+    Comida
 }

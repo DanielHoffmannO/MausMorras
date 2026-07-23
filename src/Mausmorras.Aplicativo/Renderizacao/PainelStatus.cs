@@ -20,7 +20,7 @@ public sealed class PainelStatus : PainelDeEstado
         var corModo = estado.Modo == ModoDeJogo.Jogando ? Cores.TextoPrincipal : Cores.VidaMedia;
         x = EscreverSegmento(x, textoModo, corModo);
 
-        if (estado.Personagens.Count > 1)
+        if (estado.Personagens.Count(p => p.Vida > 0) > 1)
             x = EscreverSegmento(x, $"Pessoa {estado.IndiceSelecionado + 1}/{estado.Personagens.Count}  ", Cores.TextoPrincipal);
 
         var corVida = estado.Morto ? Cores.Perigo : CorDaVida((double)personagem.Vida / personagem.VidaMaxima);
@@ -35,6 +35,8 @@ public sealed class PainelStatus : PainelDeEstado
 
         x = EscreverSegmento(x, $"  Ouro: {personagem.Ouro}", Cores.Ouro);
         x = EscreverSegmento(x, $"  Madeira: {personagem.Madeira}", Cores.Casa);
+        x = EscreverSegmento(x, $"  Fome: {personagem.Fome}", CorDaNecessidade(personagem.Fome, EstadoDoJogo.FomeMaxima));
+        x = EscreverSegmento(x, $"  Frio: {personagem.Frio}", CorDaNecessidade(personagem.Frio, EstadoDoJogo.FrioMaximo));
         EscreverSegmento(x, "  —  I inv, M mapa, C construir, Tab troca pessoa, Espaço modo, F5/F9 salvar ", Cores.TextoSecundario);
     }
 
@@ -50,5 +52,12 @@ public sealed class PainelStatus : PainelDeEstado
         >= 0.6 => Cores.VidaAlta,
         >= 0.3 => Cores.VidaMedia,
         _ => Cores.VidaBaixa
+    };
+
+    private static Color CorDaNecessidade(int valor, int maximo) => ((double)valor / maximo) switch
+    {
+        >= 0.85 => Cores.VidaBaixa,
+        >= 0.5 => Cores.VidaMedia,
+        _ => Cores.TextoSecundario
     };
 }

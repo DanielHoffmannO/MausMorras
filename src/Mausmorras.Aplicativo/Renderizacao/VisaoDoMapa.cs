@@ -76,6 +76,7 @@ public sealed class VisaoDoMapa : View
         [TipoDeCelula.Arvore] = (new Rune('♣'), Cores.Arvore),
         [TipoDeCelula.EntradaMasmorra] = (new Rune('▼'), Cores.EntradaMasmorra),
         [TipoDeCelula.SaidaParaVila] = (new Rune('▲'), Cores.SaidaParaVila),
+        [TipoDeCelula.PisoDaCasa] = (new Rune('.'), Cores.Casa),
     };
 
     private static (Rune Glifo, Color CorFrente) ObterVisualDaCelula(TipoDeCelula celula) =>
@@ -118,6 +119,17 @@ public sealed class VisaoDoMapa : View
         if (_estado.LocalAtual == TipoDeLocal.Vila && _previaAtiva)
             DesenharPreviaDeConstrucao(mapa, camX, camY, viewport);
 
+        foreach (var bicho in _estado.BichosNoLocalAtual)
+        {
+            var tx = bicho.Posicao.X - camX;
+            var ty = bicho.Posicao.Y - camY;
+            if (tx < 0 || tx >= viewport.Width || ty < 0 || ty >= viewport.Height)
+                continue;
+
+            SetAttribute(new Attribute(Cores.Bicho, Cores.Fundo));
+            AddRune(tx, ty, new Rune('a'));
+        }
+
         foreach (var p in _estado.PersonagensNoLocalAtual)
         {
             var tx = p.Posicao.X - camX;
@@ -125,7 +137,9 @@ public sealed class VisaoDoMapa : View
             if (tx < 0 || tx >= viewport.Width || ty < 0 || ty >= viewport.Height)
                 continue;
 
-            var cor = ReferenceEquals(p, _estado.Personagem) ? Cores.Personagem : Cores.TextoSecundario;
+            var cor = p.Vida <= 0 ? Cores.TextoSecundario
+                : ReferenceEquals(p, _estado.Personagem) ? Cores.Personagem
+                : Cores.PersonagemVivo;
             SetAttribute(new Attribute(cor, Cores.Fundo));
             AddRune(tx, ty, new Rune('@'));
         }

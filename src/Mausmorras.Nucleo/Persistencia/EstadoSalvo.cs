@@ -31,6 +31,7 @@ public sealed class EstadoSalvo
     public ItemSalvo? Pernas { get; set; }
     public ItemSalvo? Botas { get; set; }
     public List<ItemNoChaoSalvo> ItensNoChao { get; set; } = new();
+    public List<BichoSalvo> Bichos { get; set; } = new();
 }
 
 public sealed class PersonagemSalvo
@@ -41,11 +42,19 @@ public sealed class PersonagemSalvo
     public int VidaMaxima { get; set; }
     public int Ouro { get; set; }
     public int Madeira { get; set; }
+    public int Fome { get; set; }
+    public int Frio { get; set; }
     public List<ItemSalvo> Mochila { get; set; } = new();
     public ItemSalvo? Capacete { get; set; }
     public ItemSalvo? Peitoral { get; set; }
     public ItemSalvo? Pernas { get; set; }
     public ItemSalvo? Botas { get; set; }
+}
+
+public sealed class BichoSalvo
+{
+    public int X { get; set; }
+    public int Y { get; set; }
 }
 
 public sealed class ItemSalvo

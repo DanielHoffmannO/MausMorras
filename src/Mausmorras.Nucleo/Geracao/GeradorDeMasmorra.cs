@@ -99,8 +99,8 @@ public sealed class GeradorDeMasmorra
         var tema = TemasDeTerreno[random.Next(TemasDeTerreno.Length)];
         var densidade = tema switch
         {
-            TipoDeCelula.Agua => 0.35,
-            TipoDeCelula.Terra => 0.45,
+            TipoDeCelula.Agua => 0.55,
+            TipoDeCelula.Terra => 0.20,
             _ => 0.25
         };
 

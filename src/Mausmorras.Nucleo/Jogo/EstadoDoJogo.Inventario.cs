@@ -11,6 +11,13 @@ public sealed partial class EstadoDoJogo
 
         var item = Personagem.Mochila[indice];
 
+        if (item.Tipo == TipoDeItem.Comida)
+        {
+            ComerAlimento(item);
+            Personagem.Mochila.RemoveAt(indice);
+            return;
+        }
+
         if (item.Tipo == TipoDeItem.Generico)
         {
             UsarConsumivel(item);
@@ -59,5 +66,16 @@ public sealed partial class EstadoDoJogo
         AdicionarMensagem(curado > 0
             ? $"Você usa {item.Nome} e recupera {curado} de vida."
             : $"Você usa {item.Nome}, mas já estava com a vida cheia.");
+    }
+
+    private void ComerAlimento(Item item)
+    {
+        var antes = Personagem.Fome;
+        Personagem.Fome = Math.Max(0, Personagem.Fome - item.Valor);
+        var reduzido = antes - Personagem.Fome;
+
+        AdicionarMensagem(reduzido > 0
+            ? $"Você come {item.Nome} e reduz {reduzido} de fome."
+            : $"Você come {item.Nome}, mas já não estava com fome.");
     }
 }

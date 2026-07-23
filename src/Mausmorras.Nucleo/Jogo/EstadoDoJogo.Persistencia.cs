@@ -25,7 +25,8 @@ public sealed partial class EstadoDoJogo
             Mensagens = _mensagens.ToList(),
             ItensNoChao = _itensNoChao
                 .Select(kv => new ItemNoChaoSalvo { X = kv.Key.X, Y = kv.Key.Y, Item = ParaSalvo(kv.Value) })
-                .ToList()
+                .ToList(),
+            Bichos = _bichos.Select(b => new BichoSalvo { X = b.Posicao.X, Y = b.Posicao.Y }).ToList()
         };
 
         for (var x = 0; x < Mapa.Largura; x++)
@@ -99,7 +100,8 @@ public sealed partial class EstadoDoJogo
             _personagens = personagens,
             _indiceSelecionado = indiceSelecionado,
             Andar = dto.Andar,
-            _itensNoChao = dto.ItensNoChao.ToDictionary(i => new Posicao(i.X, i.Y), i => DeSalvo(i.Item))
+            _itensNoChao = dto.ItensNoChao.ToDictionary(i => new Posicao(i.X, i.Y), i => DeSalvo(i.Item)),
+            _bichos = dto.Bichos.Select(b => new Bicho(new Posicao(b.X, b.Y))).ToList()
         };
 
         if (dto.Andar == 0)
@@ -127,6 +129,8 @@ public sealed partial class EstadoDoJogo
         VidaMaxima = p.VidaMaxima,
         Ouro = p.Ouro,
         Madeira = p.Madeira,
+        Fome = p.Fome,
+        Frio = p.Frio,
         Mochila = p.Mochila.Select(ParaSalvo).ToList(),
         Capacete = p.Capacete is { } c ? ParaSalvo(c) : null,
         Peitoral = p.Peitoral is { } pe ? ParaSalvo(pe) : null,
@@ -136,7 +140,7 @@ public sealed partial class EstadoDoJogo
 
     private static Personagem DeSalvoPersonagem(PersonagemSalvo s)
     {
-        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Madeira = s.Madeira };
+        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Madeira = s.Madeira, Fome = s.Fome, Frio = s.Frio };
         p.Mochila.AddRange(s.Mochila.Select(DeSalvo));
         if (s.Capacete is { } c) p.Capacete = DeSalvo(c);
         if (s.Peitoral is { } pe) p.Peitoral = DeSalvo(pe);

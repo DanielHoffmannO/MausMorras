@@ -10,6 +10,8 @@ public sealed class Personagem
     public int Vida { get; set; }
     public int Ouro { get; set; }
     public int Madeira { get; set; }
+    public int Fome { get; set; }
+    public int Frio { get; set; }
 
     public Item? Capacete { get; set; }
     public Item? Peitoral { get; set; }

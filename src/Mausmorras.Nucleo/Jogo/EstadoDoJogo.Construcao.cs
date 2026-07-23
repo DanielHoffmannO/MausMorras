@@ -91,7 +91,7 @@ public sealed partial class EstadoDoJogo
 
         for (var x = area.X + 1; x < area.X + area.Largura - 1; x++)
             for (var y = area.Y + 1; y < area.Y + area.Altura - 1; y++)
-                Mapa[x, y] = TipoDeCelula.Chao;
+                Mapa[x, y] = TipoDeCelula.PisoDaCasa;
 
         Mapa[portaNaParede.X, portaNaParede.Y] = TipoDeCelula.Porta;
         Mapa[portaExterna.X, portaExterna.Y] = TipoDeCelula.Porta;

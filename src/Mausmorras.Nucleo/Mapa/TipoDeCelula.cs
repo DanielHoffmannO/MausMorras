@@ -17,5 +17,6 @@ public enum TipoDeCelula
     Casa,
     Arvore,
     EntradaMasmorra,
-    SaidaParaVila
+    SaidaParaVila,
+    PisoDaCasa
 }
