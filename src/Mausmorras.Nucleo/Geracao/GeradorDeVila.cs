@@ -7,7 +7,7 @@ public sealed class GeradorDeVila
 {
     private readonly double _densidadeDeArvores;
 
-    public GeradorDeVila(double densidadeDeArvores = 0.05)
+    public GeradorDeVila(double densidadeDeArvores = 0.03)
     {
         _densidadeDeArvores = densidadeDeArvores;
     }

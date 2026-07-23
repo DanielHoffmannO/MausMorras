@@ -1,3 +1,4 @@
+using Mausmorras.Nucleo.Entidades;
 using Mausmorras.Nucleo.Itens;
 
 namespace Mausmorras.Nucleo.Jogo;
@@ -13,7 +14,7 @@ public sealed partial class EstadoDoJogo
 
         if (item.Tipo == TipoDeItem.Comida)
         {
-            ComerAlimento(item);
+            ComerAlimento(Personagem, item);
             Personagem.Mochila.RemoveAt(indice);
             return;
         }
@@ -68,14 +69,14 @@ public sealed partial class EstadoDoJogo
             : $"Você usa {item.Nome}, mas já estava com a vida cheia.");
     }
 
-    private void ComerAlimento(Item item)
+    private void ComerAlimento(Personagem p, Item item)
     {
-        var antes = Personagem.Fome;
-        Personagem.Fome = Math.Max(0, Personagem.Fome - item.Valor);
-        var reduzido = antes - Personagem.Fome;
+        var antes = p.Fome;
+        p.Fome = Math.Max(0, p.Fome - item.Valor);
+        var reduzido = antes - p.Fome;
 
         AdicionarMensagem(reduzido > 0
-            ? $"Você come {item.Nome} e reduz {reduzido} de fome."
-            : $"Você come {item.Nome}, mas já não estava com fome.");
+            ? $"{NomeDoAtor(p)} come {item.Nome} e reduz {reduzido} de fome."
+            : $"{NomeDoAtor(p)} come {item.Nome}, mas já não estava com fome.");
     }
 }

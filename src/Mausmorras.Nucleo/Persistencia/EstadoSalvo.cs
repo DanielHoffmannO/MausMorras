@@ -32,6 +32,8 @@ public sealed class EstadoSalvo
     public ItemSalvo? Botas { get; set; }
     public List<ItemNoChaoSalvo> ItensNoChao { get; set; } = new();
     public List<BichoSalvo> Bichos { get; set; } = new();
+    public List<FogueiraAtivaSalva> FogueirasAtivas { get; set; } = new();
+    public bool PrimeiroAbrigoConstruido { get; set; }
 }
 
 public sealed class PersonagemSalvo
@@ -43,7 +45,8 @@ public sealed class PersonagemSalvo
     public int Ouro { get; set; }
     public int Madeira { get; set; }
     public int Fome { get; set; }
-    public int Frio { get; set; }
+    public int Temperatura { get; set; } = 33; // saves antigos (formato "Frio" 0-300) nao tem esse campo -- default 33 = ideal, ja que as escalas sao incompativeis e nao ha migracao sensata possivel
+    public int Sono { get; set; }
     public List<ItemSalvo> Mochila { get; set; } = new();
     public ItemSalvo? Capacete { get; set; }
     public ItemSalvo? Peitoral { get; set; }
@@ -55,6 +58,13 @@ public sealed class BichoSalvo
 {
     public int X { get; set; }
     public int Y { get; set; }
+}
+
+public sealed class FogueiraAtivaSalva
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int TurnoDeExpiracao { get; set; }
 }
 
 public sealed class ItemSalvo

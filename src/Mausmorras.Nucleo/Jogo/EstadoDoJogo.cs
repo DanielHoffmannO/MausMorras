@@ -21,12 +21,28 @@ public sealed partial class EstadoDoJogo
     public const int FomeMaxima = 300; // ~2,5 dias de jogo (1 dia = 120 turnos)
     private const int FomePorTurno = 1;
     private const int DanoPorFomeMaxima = 1;
-    public const int FrioMaximo = 300;
-    private const int FrioPorTurno = 1;
-    private const int DanoPorFrioMaximo = 1;
-    private const int VidaMaximaMinimaFundador = 18;
-    private const int VidaMaximaMaximaFundador = 22; // inclusivo
-    private const double LimiarFrioParaBuscarAbrigo = 0.5; // mesmo limiar do aviso amarelo no HUD
+    public const int TemperaturaIdeal = 33;
+    public const int TemperaturaCritica = 15; // abaixo disso, comeca a tomar dano
+    private const int TemperaturaAmbienteDia = 32; // de dia, quase nao ha frio de verdade
+    private const int TemperaturaAmbienteNoite = 10; // de noite, esfria de verdade
+    private const int TemperaturaAmbienteCasa = 30;
+    private const int TemperaturaAmbienteFogueira = 40;
+    private const int TaxaDeTrocaDeCalor = 2; // quanto a temperatura anda por turno em direcao ao ambiente
+    private const int DanoPorTemperaturaCritica = 1;
+    private const double LimiarTemperaturaParaBuscarAbrigo = 0.35;
+    private const int RaioDaFogueira = 2; // raio de efeito, nao precisa estar EM cima
+    private const int CustoDaFogueira = 10; // madeira, mais barato que a casa (25)
+    private const int RaioDeVisaoDaFogueira = 4; // menor que a visão noturna das pessoas (6) -- ilumina, não enxerga tudo
+    private const int DuracaoDaFogueira = 150; // um pouco mais que um ciclo dia/noite completo (120 turnos)
+
+    public const int SonoMaximo = 300;
+    private const int SonoPorTurno = 1;
+    private const int DanoPorSonoMaximo = 1;
+    private const double LimiarSonoParaDormir = 0.35;
+    private const int AlivioDoSonoAoDescansar = 5;
+    private const int VidaMaximaMinimaFundador = 22; // era 18 -- mais margem de sobrevivencia
+    private const int VidaMaximaMaximaFundador = 28; // era 22
+    private const double LimiarFomeParaBuscarComida = 0.35; // era 0.5 -- age mais cedo, sobra mais tempo de volta
     private const int PopulacaoAlvoDeBichos = 6;
     private const int RaioDeAlcanceDoBicho = 3; // distancia maxima da borda do mapa
     private const int ValorDaCarne = 80; // reduz esse tanto de Fome ao comer
@@ -40,6 +56,9 @@ public sealed partial class EstadoDoJogo
     private Posicao _ultimaDirecao = Direcao.Sul;
     private int _turno;
     private bool _vilaTotalmenteExplorada;
+    private bool _existeCasaNaVila;
+    private bool _primeiroAbrigoConstruido;
+    private readonly List<(Posicao Posicao, int TurnoDeExpiracao)> _fogueirasAtivas = new();
 
     private int _largura;
     private int _altura;
@@ -147,7 +166,9 @@ public sealed partial class EstadoDoJogo
         VerificarCacaEncontros();
         MoverBichos();
         AtualizarNecessidade(p => p.Fome, (p, v) => p.Fome = v, FomeMaxima, FomePorTurno, DanoPorFomeMaxima, "está faminta", "morreu de fome");
-        AtualizarNecessidade(p => p.Frio, (p, v) => p.Frio = v, FrioMaximo, FrioPorTurno, DanoPorFrioMaximo, "está com frio", "morreu de frio", EstaProtegidoDoFrio);
+        AtualizarNecessidade(p => p.Sono, (p, v) => p.Sono = v, SonoMaximo, SonoPorTurno, DanoPorSonoMaximo, "está com sono", "morreu de exaustão", AlivioDoSono);
+        AtualizarTemperatura();
+        AtualizarFogueiras();
         TransferirControleAoMorrer();
         AtualizarVisibilidade();
     }
@@ -170,10 +191,59 @@ public sealed partial class EstadoDoJogo
         _indiceSelecionado = indiceVivo;
     }
 
-    private bool EstaProtegidoDoFrio(Personagem p)
+    private void AtualizarTemperatura()
+    {
+        var ambienteBase = EhDia ? TemperaturaAmbienteDia : TemperaturaAmbienteNoite;
+
+        for (var i = 0; i < _personagens.Count; i++)
+        {
+            var p = _personagens[i];
+            if (p.Vida <= 0)
+                continue;
+
+            var ambiente = AmbienteEfetivo(p, ambienteBase);
+            var mudanca = Math.Clamp(ambiente - p.Temperatura, -TaxaDeTrocaDeCalor, TaxaDeTrocaDeCalor);
+            p.Temperatura += mudanca;
+
+            if (p.Temperatura < TemperaturaCritica)
+            {
+                var vidaAntes = p.Vida;
+                p.Vida = Math.Max(0, p.Vida - DanoPorTemperaturaCritica);
+                if (vidaAntes > 0 && p.Vida == 0)
+                    AdicionarMensagem($"{NomeDoAtor(p)} morreu de frio.");
+            }
+        }
+    }
+
+    private int AmbienteEfetivo(Personagem p, int ambienteBase)
     {
         var mapaRelevante = ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
-        return mapaRelevante is not null && mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.PisoDaCasa;
+        if (mapaRelevante is null)
+            return ambienteBase;
+
+        if (EstaPertoDeFogueira(mapaRelevante, p.Posicao))
+            return TemperaturaAmbienteFogueira;
+
+        if (mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.PisoDaCasa)
+            return TemperaturaAmbienteCasa;
+
+        return ambienteBase;
+    }
+
+    private bool EstaPertoDeFogueira(MapaDaMasmorra mapa, Posicao p)
+    {
+        for (var dx = -RaioDaFogueira; dx <= RaioDaFogueira; dx++)
+        {
+            for (var dy = -RaioDaFogueira; dy <= RaioDaFogueira; dy++)
+            {
+                var x = p.X + dx;
+                var y = p.Y + dy;
+                if (mapa.DentroDosLimites(x, y) && mapa[x, y] == TipoDeCelula.Fogueira)
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     // o selecionado so tem posicao valida no mapa da vila se estiver de fato la;
@@ -195,14 +265,200 @@ public sealed partial class EstadoDoJogo
             if (ehControlado || !EstaNaVila(p))
                 continue;
 
-            if (p.Frio < FrioMaximo * LimiarFrioParaBuscarAbrigo)
-                continue;
+            var fomeSeveridade = (double)p.Fome / FomeMaxima;
+            var sonoSeveridade = (double)p.Sono / SonoMaximo;
+            var temperaturaSeveridade = Math.Clamp((double)(TemperaturaIdeal - p.Temperatura) / (TemperaturaIdeal - TemperaturaCritica), 0, 1);
 
-            var passo = Caminho.ProximoPasso(_mapaDaVila, p.Posicao, pos => _mapaDaVila[pos.X, pos.Y] == TipoDeCelula.PisoDaCasa);
-            if (passo is { } destino)
-                p.Posicao = destino;
+            var fomeUrgente = fomeSeveridade >= LimiarFomeParaBuscarComida;
+            var frioUrgente = temperaturaSeveridade >= LimiarTemperaturaParaBuscarAbrigo;
+            var sonoUrgente = sonoSeveridade >= LimiarSonoParaDormir;
+
+            var severidadeVencedora = -1.0;
+            Action? acaoVencedora = null;
+
+            void Considerar(bool urgente, double severidade, Action acao)
+            {
+                if (urgente && severidade >= severidadeVencedora)
+                {
+                    severidadeVencedora = severidade;
+                    acaoVencedora = acao;
+                }
+            }
+
+            Considerar(fomeUrgente, fomeSeveridade, () => TentarResolverFome(p));
+            Considerar(frioUrgente, temperaturaSeveridade, () => TentarBuscarAbrigo(p));
+            Considerar(sonoUrgente, sonoSeveridade, () => TentarDormir(p));
+
+            if (acaoVencedora is not null)
+                acaoVencedora.Invoke();
+            else if (!_existeCasaNaVila)
+            {
+                // uma vez que o primeiro abrigo qualquer (fogueira) ja tenha existido, a prioridade
+                // vira definitivamente a casa permanente -- se isso reagisse ao estado ATUAL de
+                // _fogueirasAtivas (que zera quando ela expira), toda vez que a fogueira apagasse
+                // quem estivesse economizando pra casa desviaria a madeira acumulada pra reconstruir
+                // a fogueira de novo, e a casa nunca teria a chance de juntar os 25 necessarios
+                if (_primeiroAbrigoConstruido)
+                    TentarObterMadeira(p, TamanhoDaCasa * TamanhoDaCasa, TentarConstruirAutonomamente);
+                else
+                    TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
+            }
+            else if (!EstaProtegidoDoFrio(p))
+            {
+                // ocioso e longe de qualquer abrigo -- espalha uma fogueira aqui mesmo em vez de so
+                // guardar madeira parada. Isso vai deixando fogueiras pelo caminho que o casal
+                // realmente percorre (caça, sono), cobrindo areas que a casa unica nunca alcancaria
+                TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
+            }
         }
     }
+
+    private void TentarResolverFome(Personagem p)
+    {
+        var comida = p.Mochila.FirstOrDefault(it => it.Tipo == TipoDeItem.Comida);
+        if (comida is not null)
+        {
+            ComerAlimento(p, comida);
+            p.Mochila.Remove(comida);
+            return;
+        }
+
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
+        if (passo is { } destino)
+            p.Posicao = destino;
+    }
+
+    private void TentarBuscarAbrigo(Personagem p)
+    {
+        if (EstaProtegidoDoFrio(p))
+            return;
+
+        // uma caminhada longa demais ate o abrigo mais proximo pode nunca terminar a tempo -- se
+        // sobra madeira na mochila, uma fogueira bem onde a pessoa esta e sempre mais segura e mais
+        // rapida do que apostar numa volta pra casa, entao vira a resposta padrao ao frio, nao um
+        // ultimo recurso; a casa/vila tem varias fogueiras espalhadas com o tempo por causa disso
+        if (p.Madeira >= CustoDaFogueira && ConstruirFogueiraSePossivel(p))
+            return;
+
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos =>
+            _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa || EstaPertoDeFogueira(_mapaDaVila, pos));
+        if (passo is { } destino)
+            p.Posicao = destino;
+    }
+
+    private bool EstaProtegidoDoFrio(Personagem p)
+    {
+        var mapaRelevante = ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
+        if (mapaRelevante is null)
+            return false;
+
+        return EstaPertoDeFogueira(mapaRelevante, p.Posicao) || mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.PisoDaCasa;
+    }
+
+    private void TentarDormir(Personagem p)
+    {
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa);
+        if (passo is { } destino)
+            p.Posicao = destino;
+    }
+
+    private void TentarObterMadeira(Personagem p, int custoNecessario, Action<Personagem> construir)
+    {
+        if (p.Madeira >= custoNecessario)
+        {
+            construir(p);
+            return;
+        }
+
+        var arvoreAdjacente = ProcurarArvoreAdjacente(p.Posicao);
+        if (arvoreAdjacente is { } arvore)
+        {
+            CortarArvoreAutonomamente(p, arvore);
+            return;
+        }
+
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, EstaAdjacenteAArvore);
+        if (passo is { } destino)
+            p.Posicao = destino;
+    }
+
+    private Posicao? ProcurarArvoreAdjacente(Posicao pos)
+    {
+        foreach (var d in Direcoes)
+        {
+            var vizinho = pos + d;
+            if (_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) && _mapaDaVila[vizinho.X, vizinho.Y] == TipoDeCelula.Arvore)
+                return vizinho;
+        }
+
+        return null;
+    }
+
+    private bool EstaAdjacenteAArvore(Posicao pos) => ProcurarArvoreAdjacente(pos) is not null;
+
+    private void CortarArvoreAutonomamente(Personagem p, Posicao arvore)
+    {
+        _mapaDaVila![arvore.X, arvore.Y] = TipoDeCelula.Grama;
+        p.Madeira += MadeiraPorArvore;
+        AdicionarMensagem($"{NomeDoAtor(p)} corta uma árvore e ganha {MadeiraPorArvore} de madeira.");
+    }
+
+    private void TentarConstruirAutonomamente(Personagem p)
+    {
+        foreach (var direcao in Direcoes)
+        {
+            var area = CalcularAreaDaCasa(p.Posicao, direcao);
+            var portaExterna = CalcularPosicaoNaDirecao(p.Posicao, direcao, 1);
+            var portaNaParede = CalcularPosicaoNaDirecao(p.Posicao, direcao, DistanciaDaCasaAoPersonagem);
+
+            if (!AreaLivreParaConstrucao(_mapaDaVila!, area) || !TerrenoConstruivel(_mapaDaVila!, portaExterna) || !AreaLivreDePersonagens(area, portaExterna, p))
+                continue;
+
+            ConstruirCasa(_mapaDaVila!, area, portaNaParede, portaExterna);
+            p.Madeira -= TamanhoDaCasa * TamanhoDaCasa;
+            AdicionarMensagem($"{NomeDoAtor(p)} constrói uma casa.");
+            return;
+        }
+    }
+
+    private void TentarConstruirFogueiraAutonomamente(Personagem p) => ConstruirFogueiraSePossivel(p);
+
+    private bool ConstruirFogueiraSePossivel(Personagem p)
+    {
+        foreach (var direcao in Direcoes)
+        {
+            var posicao = CalcularPosicaoNaDirecao(p.Posicao, direcao, 1);
+            if (!TerrenoConstruivel(_mapaDaVila!, posicao) || PosicaoOcupadaPorOutroPersonagem(posicao, p))
+                continue;
+
+            ConstruirFogueira(_mapaDaVila!, posicao);
+            p.Madeira -= CustoDaFogueira;
+            AdicionarMensagem($"{NomeDoAtor(p)} acende uma fogueira.");
+            return true;
+        }
+
+        return false;
+    }
+
+    private void AtualizarFogueiras()
+    {
+        for (var i = _fogueirasAtivas.Count - 1; i >= 0; i--)
+        {
+            if (_turno < _fogueirasAtivas[i].TurnoDeExpiracao)
+                continue;
+
+            var posicao = _fogueirasAtivas[i].Posicao;
+            _fogueirasAtivas.RemoveAt(i);
+
+            if (_mapaDaVila is not null && _mapaDaVila[posicao.X, posicao.Y] == TipoDeCelula.Fogueira)
+                _mapaDaVila[posicao.X, posicao.Y] = TipoDeCelula.Chao;
+
+            AdicionarMensagem("Uma fogueira se apaga.");
+        }
+    }
+
+    private string NomeDoAtor(Personagem p) =>
+        ReferenceEquals(p, Personagem) ? "Você" : $"A Pessoa {_personagens.IndexOf(p) + 1}";
 
     private void MoverBichos()
     {
@@ -254,11 +510,19 @@ public sealed partial class EstadoDoJogo
 
             _bichos.RemoveAt(i);
             cacador.Mochila.Add(new Item("Carne", TipoDeItem.Comida, ValorDaCarne));
-            AdicionarMensagem("Você caça um animal e ganha carne.");
+            AdicionarMensagem($"{NomeDoAtor(cacador)} caça um animal e ganha carne.");
         }
     }
 
-    private void AtualizarNecessidade(Func<Personagem, int> obter, Action<Personagem, int> definir, int maximo, int incremento, int dano, string mensagemNoMaximo, string mensagemDeMorte, Func<Personagem, bool>? protegido = null)
+    private int AlivioDoSono(Personagem p) => EstaDescansando(p) ? AlivioDoSonoAoDescansar : 0;
+
+    private bool EstaDescansando(Personagem p)
+    {
+        var mapaRelevante = ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
+        return mapaRelevante is not null && mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.PisoDaCasa;
+    }
+
+    private void AtualizarNecessidade(Func<Personagem, int> obter, Action<Personagem, int> definir, int maximo, int incremento, int dano, string mensagemNoMaximo, string mensagemDeMorte, Func<Personagem, int>? alivio = null)
     {
         for (var i = 0; i < _personagens.Count; i++)
         {
@@ -267,12 +531,11 @@ public sealed partial class EstadoDoJogo
 
             if (valor < maximo)
             {
-                if (protegido?.Invoke(p) != true)
-                {
-                    definir(p, Math.Min(maximo, valor + incremento));
-                    if (obter(p) == maximo)
-                        AdicionarMensagem($"A Pessoa {i + 1} {mensagemNoMaximo}.");
-                }
+                var mudanca = incremento - (alivio?.Invoke(p) ?? 0);
+                // alivio pode deixar a mudanca negativa (reducao ativa), entao precisa de piso 0 alem do teto
+                definir(p, Math.Clamp(valor + mudanca, 0, maximo));
+                if (obter(p) == maximo)
+                    AdicionarMensagem($"A Pessoa {i + 1} {mensagemNoMaximo}.");
             }
             else
             {
@@ -322,17 +585,22 @@ public sealed partial class EstadoDoJogo
         TodosVisiveis = false;
         var raio = LocalAtual == TipoDeLocal.Vila ? RaioDeVisaoNoiteNaVila : RaioDeVisao;
 
+        var visiveis = new HashSet<Posicao>();
         if (Modo == ModoDeJogo.Observador)
         {
-            var visiveis = new HashSet<Posicao>();
             foreach (var p in PersonagensNoLocalAtual)
                 visiveis.UnionWith(CampoDeVisao.Calcular(Mapa, p.Posicao, raio));
-            CelulasVisiveis = visiveis;
         }
         else
         {
-            CelulasVisiveis = CampoDeVisao.Calcular(Mapa, Personagem.Posicao, raio);
+            visiveis.UnionWith(CampoDeVisao.Calcular(Mapa, Personagem.Posicao, raio));
         }
+
+        if (LocalAtual == TipoDeLocal.Vila)
+            foreach (var fogueira in _fogueirasAtivas)
+                visiveis.UnionWith(CampoDeVisao.Calcular(Mapa, fogueira.Posicao, RaioDeVisaoDaFogueira));
+
+        CelulasVisiveis = visiveis;
 
         foreach (var celula in CelulasVisiveis)
             Mapa.MarcarExplorada(celula.X, celula.Y);

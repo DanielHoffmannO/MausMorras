@@ -26,7 +26,9 @@ public sealed partial class EstadoDoJogo
             ItensNoChao = _itensNoChao
                 .Select(kv => new ItemNoChaoSalvo { X = kv.Key.X, Y = kv.Key.Y, Item = ParaSalvo(kv.Value) })
                 .ToList(),
-            Bichos = _bichos.Select(b => new BichoSalvo { X = b.Posicao.X, Y = b.Posicao.Y }).ToList()
+            Bichos = _bichos.Select(b => new BichoSalvo { X = b.Posicao.X, Y = b.Posicao.Y }).ToList(),
+            FogueirasAtivas = _fogueirasAtivas.Select(f => new FogueiraAtivaSalva { X = f.Posicao.X, Y = f.Posicao.Y, TurnoDeExpiracao = f.TurnoDeExpiracao }).ToList(),
+            PrimeiroAbrigoConstruido = _primeiroAbrigoConstruido
         };
 
         for (var x = 0; x < Mapa.Largura; x++)
@@ -111,6 +113,24 @@ public sealed partial class EstadoDoJogo
             estado._salasDaVila = new[] { new Sala(spawnDeRetorno.X, spawnDeRetorno.Y, 1, 1) };
         }
 
+        if (estado._mapaDaVila is not null)
+        {
+            estado._existeCasaNaVila = ExisteCasaNoMapa(estado._mapaDaVila);
+            estado._fogueirasAtivas.AddRange(dto.FogueirasAtivas.Select(f => (new Posicao(f.X, f.Y), f.TurnoDeExpiracao)));
+
+            // saves de antes dessa feature podem ter fogueira construída manualmente sem estar na lista --
+            // sem isso ela nunca expiraria nem contaria pra iluminação, já que ambas dependem de _fogueirasAtivas
+            var posicoesConhecidas = estado._fogueirasAtivas.Select(f => f.Posicao).ToHashSet();
+            for (var x = 0; x < estado._mapaDaVila.Largura; x++)
+                for (var y = 0; y < estado._mapaDaVila.Altura; y++)
+                    if (estado._mapaDaVila[x, y] == TipoDeCelula.Fogueira && !posicoesConhecidas.Contains(new Posicao(x, y)))
+                        estado._fogueirasAtivas.Add((new Posicao(x, y), estado._turno + DuracaoDaFogueira));
+
+            // saves de antes desse campo existir nao tem PrimeiroAbrigoConstruido salvo (vem false) --
+            // se ja existe casa ou fogueira nesse ponto, o bootstrap claramente ja passou
+            estado._primeiroAbrigoConstruido = dto.PrimeiroAbrigoConstruido || estado._existeCasaNaVila || estado._fogueirasAtivas.Count > 0;
+        }
+
         estado._mensagens.AddRange(dto.Mensagens);
         estado.AdicionarMensagem("Jogo carregado.");
         estado.AtualizarVisibilidade();
@@ -121,6 +141,16 @@ public sealed partial class EstadoDoJogo
 
     private static Item DeSalvo(ItemSalvo salvo) => new(salvo.Nome, salvo.Tipo, salvo.Valor);
 
+    private static bool ExisteCasaNoMapa(MapaDaMasmorra mapa)
+    {
+        for (var x = 0; x < mapa.Largura; x++)
+            for (var y = 0; y < mapa.Altura; y++)
+                if (mapa[x, y] == TipoDeCelula.PisoDaCasa)
+                    return true;
+
+        return false;
+    }
+
     private static PersonagemSalvo ParaSalvoPersonagem(Personagem p) => new()
     {
         X = p.Posicao.X,
@@ -130,7 +160,8 @@ public sealed partial class EstadoDoJogo
         Ouro = p.Ouro,
         Madeira = p.Madeira,
         Fome = p.Fome,
-        Frio = p.Frio,
+        Temperatura = p.Temperatura,
+        Sono = p.Sono,
         Mochila = p.Mochila.Select(ParaSalvo).ToList(),
         Capacete = p.Capacete is { } c ? ParaSalvo(c) : null,
         Peitoral = p.Peitoral is { } pe ? ParaSalvo(pe) : null,
@@ -140,7 +171,7 @@ public sealed partial class EstadoDoJogo
 
     private static Personagem DeSalvoPersonagem(PersonagemSalvo s)
     {
-        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Madeira = s.Madeira, Fome = s.Fome, Frio = s.Frio };
+        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Madeira = s.Madeira, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono };
         p.Mochila.AddRange(s.Mochila.Select(DeSalvo));
         if (s.Capacete is { } c) p.Capacete = DeSalvo(c);
         if (s.Peitoral is { } pe) p.Peitoral = DeSalvo(pe);

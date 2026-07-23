@@ -14,6 +14,8 @@ public sealed class VisaoDoMapa : View
     private EstadoDoJogo _estado;
     private bool _previaAtiva;
     private DateTime _ultimoCliqueDoC;
+    private bool _previaFogueiraAtiva;
+    private DateTime _ultimoCliqueDoF;
     private object? _timeoutTempoReal;
 
     private readonly Dictionary<KeyCode, Func<bool>> _acoesPorTecla;
@@ -51,6 +53,7 @@ public sealed class VisaoDoMapa : View
             ['i'] = AbrirInventario,
             ['m'] = AlternarMiniMapa,
             ['c'] = AlternarOuConstruir,
+            ['f'] = AlternarOuConstruirFogueira,
             ['w'] = () => _estado.TentarMoverPersonagem(Direcao.Norte),
             ['s'] = () => _estado.TentarMoverPersonagem(Direcao.Sul),
             ['a'] = () => _estado.TentarMoverPersonagem(Direcao.Oeste),
@@ -77,6 +80,7 @@ public sealed class VisaoDoMapa : View
         [TipoDeCelula.EntradaMasmorra] = (new Rune('▼'), Cores.EntradaMasmorra),
         [TipoDeCelula.SaidaParaVila] = (new Rune('▲'), Cores.SaidaParaVila),
         [TipoDeCelula.PisoDaCasa] = (new Rune('.'), Cores.Casa),
+        [TipoDeCelula.Fogueira] = (new Rune('^'), Cores.Fogueira),
     };
 
     private static (Rune Glifo, Color CorFrente) ObterVisualDaCelula(TipoDeCelula celula) =>
@@ -119,6 +123,9 @@ public sealed class VisaoDoMapa : View
         if (_estado.LocalAtual == TipoDeLocal.Vila && _previaAtiva)
             DesenharPreviaDeConstrucao(mapa, camX, camY, viewport);
 
+        if (_estado.LocalAtual == TipoDeLocal.Vila && _previaFogueiraAtiva)
+            DesenharPreviaDeFogueira(mapa, camX, camY, viewport);
+
         foreach (var bicho in _estado.BichosNoLocalAtual)
         {
             var tx = bicho.Posicao.X - camX;
@@ -157,6 +164,13 @@ public sealed class VisaoDoMapa : View
         for (var x = area.X; x < area.X + area.Largura; x++)
             for (var y = area.Y; y < area.Y + area.Altura; y++)
                 DesenharCelulaComPrevia(mapa, x, y, camX, camY, viewport, corFundoPrevia);
+    }
+
+    private void DesenharPreviaDeFogueira(MapaDaMasmorra mapa, int camX, int camY, System.Drawing.Rectangle viewport)
+    {
+        var (posicao, valida) = _estado.ObterPreviaDeFogueira();
+        var corFundoPrevia = valida ? Cores.PreviaValida : Cores.PreviaInvalida;
+        DesenharCelulaComPrevia(mapa, posicao.X, posicao.Y, camX, camY, viewport, corFundoPrevia);
     }
 
     private void DesenharCelulaComPrevia(MapaDaMasmorra mapa, int x, int y, int camX, int camY, System.Drawing.Rectangle viewport, Color corFundoPrevia)
@@ -279,9 +293,37 @@ public sealed class VisaoDoMapa : View
         else
         {
             _previaAtiva = true;
+            _previaFogueiraAtiva = false;
         }
 
         _ultimoCliqueDoC = agora;
+        return true;
+    }
+
+    private bool AlternarOuConstruirFogueira()
+    {
+        if (_estado.Modo != ModoDeJogo.Jogando)
+            return false;
+
+        var agora = DateTime.UtcNow;
+        var cliqueDuplo = _previaFogueiraAtiva && agora - _ultimoCliqueDoF <= JanelaDeCliqueDuplo;
+
+        if (cliqueDuplo)
+        {
+            _previaFogueiraAtiva = false;
+        }
+        else if (_previaFogueiraAtiva)
+        {
+            _estado.TentarConstruirFogueira();
+            _previaFogueiraAtiva = false;
+        }
+        else
+        {
+            _previaFogueiraAtiva = true;
+            _previaAtiva = false;
+        }
+
+        _ultimoCliqueDoF = agora;
         return true;
     }
 }

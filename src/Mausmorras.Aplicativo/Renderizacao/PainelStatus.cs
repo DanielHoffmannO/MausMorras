@@ -36,8 +36,9 @@ public sealed class PainelStatus : PainelDeEstado
         x = EscreverSegmento(x, $"  Ouro: {personagem.Ouro}", Cores.Ouro);
         x = EscreverSegmento(x, $"  Madeira: {personagem.Madeira}", Cores.Casa);
         x = EscreverSegmento(x, $"  Fome: {personagem.Fome}", CorDaNecessidade(personagem.Fome, EstadoDoJogo.FomeMaxima));
-        x = EscreverSegmento(x, $"  Frio: {personagem.Frio}", CorDaNecessidade(personagem.Frio, EstadoDoJogo.FrioMaximo));
-        EscreverSegmento(x, "  —  I inv, M mapa, C construir, Tab troca pessoa, Espaço modo, F5/F9 salvar ", Cores.TextoSecundario);
+        x = EscreverSegmento(x, $"  Temp: {personagem.Temperatura}°", CorDaTemperatura(personagem.Temperatura));
+        x = EscreverSegmento(x, $"  Sono: {personagem.Sono}", CorDaNecessidade(personagem.Sono, EstadoDoJogo.SonoMaximo));
+        EscreverSegmento(x, "  —  I inv, M mapa, C casa, F fogueira, Tab troca pessoa, Espaço modo, F5/F9 salvar ", Cores.TextoSecundario);
     }
 
     private int EscreverSegmento(int x, string texto, Color cor)
@@ -58,6 +59,13 @@ public sealed class PainelStatus : PainelDeEstado
     {
         >= 0.85 => Cores.VidaBaixa,
         >= 0.5 => Cores.VidaMedia,
+        _ => Cores.TextoSecundario
+    };
+
+    private static Color CorDaTemperatura(int temperatura) => temperatura switch
+    {
+        <= EstadoDoJogo.TemperaturaCritica => Cores.VidaBaixa,
+        <= EstadoDoJogo.TemperaturaCritica + 5 => Cores.VidaMedia,
         _ => Cores.TextoSecundario
     };
 }
