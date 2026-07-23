@@ -31,14 +31,17 @@ public sealed partial class EstadoDoJogo
     private const int DanoPorTemperaturaCritica = 1;
     private const double LimiarTemperaturaParaBuscarAbrigo = 0.35;
     private const int RaioDaFogueira = 2; // raio de efeito, nao precisa estar EM cima
-    private const int CustoDaFogueira = 10; // madeira, mais barato que a casa (25)
+    private const int CustoDaFogueira = 5; // uma arvore so -- a temperatura cai rapido demais (18 graus / 2 por turno) pra exigir duas
     private const int RaioDeVisaoDaFogueira = 4; // menor que a visão noturna das pessoas (6) -- ilumina, não enxerga tudo
+    private const int AntecedenciaParaVoltarAntesDoAnoitecer = 10; // turnos de folga antes do fim do dia
+    private const double SeveridadeDoAnoitecerIminente = 0.2; // so vence fome/sono ainda bem baixos, nao interrompe algo em andamento
+    private const int TemperaturaParaFogueiraDuranteACaca = 31; // logo abaixo do dia normal (32) -- dispara quase no instante em que a noite comeca a esfriar, maximizando o tempo de reacao
     private const int DuracaoDaFogueira = 150; // um pouco mais que um ciclo dia/noite completo (120 turnos)
 
     public const int SonoMaximo = 300;
     private const int SonoPorTurno = 1;
     private const int DanoPorSonoMaximo = 1;
-    private const double LimiarSonoParaDormir = 0.35;
+    private const double LimiarSonoParaDormir = 0.2; // era 0.35 -- mais baixo que fome/frio de proposito, ja que dormir so alivia em casa, sem equivalente portatil tipo a fogueira, entao precisa de mais folga pra caminhada de volta
     private const int AlivioDoSonoAoDescansar = 5;
     private const int VidaMaximaMinimaFundador = 22; // era 18 -- mais margem de sobrevivencia
     private const int VidaMaximaMaximaFundador = 28; // era 22
@@ -273,6 +276,13 @@ public sealed partial class EstadoDoJogo
             var frioUrgente = temperaturaSeveridade >= LimiarTemperaturaParaBuscarAbrigo;
             var sonoUrgente = sonoSeveridade >= LimiarSonoParaDormir;
 
+            // mesmo sem nenhuma necessidade critica ainda, comecar a voltar pro abrigo com
+            // antecedencia (em vez de so reagir depois que o frio ja esta severo) e o que da tempo
+            // de sobra pra caminhada -- sem isso, quem esta longe demais quando a noite cai nunca
+            // chega a tempo, nao importa quao cedo o frio em si dispara a busca por abrigo
+            var turnosParaAnoitecer = TurnosPorMetadeDoDia - (_turno % TurnosPorMetadeDoDia);
+            var anoitecerIminente = EhDia && turnosParaAnoitecer <= AntecedenciaParaVoltarAntesDoAnoitecer && !EstaProtegidoDoFrio(p);
+
             var severidadeVencedora = -1.0;
             Action? acaoVencedora = null;
 
@@ -287,7 +297,12 @@ public sealed partial class EstadoDoJogo
 
             Considerar(fomeUrgente, fomeSeveridade, () => TentarResolverFome(p));
             Considerar(frioUrgente, temperaturaSeveridade, () => TentarBuscarAbrigo(p));
-            Considerar(sonoUrgente, sonoSeveridade, () => TentarDormir(p));
+            // sono so pode vencer a prioridade se ja existir casa pra ir -- caso contrario TentarDormir
+            // nao acha nenhum PisoDaCasa e nao faz nada, e se fome e sono empatarem no maximo (ambos
+            // severidade 1.0) o sono venceria o empate pra sempre, travando ate a fome e a construcao
+            // da casa (que so roda quando NENHUMA necessidade vence a prioridade nesse turno)
+            Considerar(sonoUrgente && _existeCasaNaVila, sonoSeveridade, () => TentarDormir(p));
+            Considerar(anoitecerIminente, SeveridadeDoAnoitecerIminente, () => TentarBuscarAbrigo(p));
 
             if (acaoVencedora is not null)
                 acaoVencedora.Invoke();
@@ -321,6 +336,35 @@ public sealed partial class EstadoDoJogo
             ComerAlimento(p, comida);
             p.Mochila.Remove(comida);
             return;
+        }
+
+        // uma cacada pode levar pra bem longe de qualquer abrigo por muitos turnos seguidos, e a
+        // temperatura despenca rapido demais (18 graus a 2/turno = so uns 9 turnos de folga) pra dar
+        // tempo de reagir do zero -- se ja esta esfriando e desprotegido, desvia pra arvore mais
+        // proxima e depois acende a fogueira ali mesmo, sem esperar a fome ceder prioridade pro frio
+        if (p.Temperatura <= TemperaturaParaFogueiraDuranteACaca && !EstaProtegidoDoFrio(p))
+        {
+            if (p.Madeira >= CustoDaFogueira)
+            {
+                if (ConstruirFogueiraSePossivel(p))
+                    return;
+            }
+            else
+            {
+                var arvoreAdjacente = ProcurarArvoreAdjacente(p.Posicao);
+                if (arvoreAdjacente is { } arvore)
+                {
+                    CortarArvoreAutonomamente(p, arvore);
+                    return;
+                }
+
+                var passoParaArvore = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, EstaAdjacenteAArvore);
+                if (passoParaArvore is { } destinoArvore)
+                {
+                    p.Posicao = destinoArvore;
+                    return;
+                }
+            }
         }
 
         var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
