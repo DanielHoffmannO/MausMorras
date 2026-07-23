@@ -16,7 +16,8 @@ var janela = new Window
 
 var visaoDoMapa = new VisaoDoMapa(estado, caminhoDoSave);
 var painelStatus = new PainelStatus(() => visaoDoMapa.Estado) { Y = 0 };
-var painelMensagens = new PainelMensagens(() => visaoDoMapa.Estado) { Y = Pos.AnchorEnd(6) };
+var painelMensagens = new PainelMensagens(() => visaoDoMapa.Estado) { Y = Pos.AnchorEnd(6), Width = Dim.Percent(60) };
+var painelConversa = new PainelConversa(() => visaoDoMapa.Estado) { X = Pos.Right(painelMensagens), Y = Pos.AnchorEnd(6), Width = Dim.Fill() };
 var miniMapa = new MiniMapa(() => visaoDoMapa.Estado) { X = Pos.AnchorEnd(MiniMapa.LarguraTotal), Y = Pos.Bottom(painelStatus) };
 var painelInventario = new PainelInventario(() => visaoDoMapa.Estado) { Visible = false, X = Pos.Center(), Y = Pos.Center() };
 
@@ -27,6 +28,7 @@ void AtualizarPaineis()
 {
     painelStatus.SetNeedsDraw();
     painelMensagens.SetNeedsDraw();
+    painelConversa.SetNeedsDraw();
     miniMapa.SetNeedsDraw();
 }
 
@@ -55,7 +57,7 @@ painelInventario.AoFechar = () =>
     AtualizarPaineis();
 };
 
-janela.Add(painelStatus, visaoDoMapa, miniMapa, painelMensagens, painelInventario);
+janela.Add(painelStatus, visaoDoMapa, miniMapa, painelMensagens, painelConversa, painelInventario);
 
 Application.Run(janela);
 Application.Shutdown();

@@ -49,10 +49,15 @@ public sealed partial class EstadoDoJogo
     private const int PopulacaoAlvoDeBichos = 6;
     private const int RaioDeAlcanceDoBicho = 3; // distancia maxima da borda do mapa
     private const int ValorDaCarne = 80; // reduz esse tanto de Fome ao comer
+    private const int MadeiraPorArvoreFrutifera = 2; // menos que a arvore normal (5) -- o foco aqui e a fruta
+    private const int ValorDaFruta = 40; // metade da carne (80) -- alivio menor, mas nao precisa cacar
+    private const int TurnosDeRegrowthDaFruta = 60; // meio dia de folga antes de poder colher de novo no mesmo pe
+    private const double ChanceDeArvoreFrutiferaAoRebrotar = 0.2;
 
     private static readonly Posicao[] Direcoes = { Direcao.Norte, Direcao.Sul, Direcao.Leste, Direcao.Oeste };
 
     private readonly List<string> _mensagens = new();
+    private readonly List<string> _conversas = new();
     private Dictionary<Posicao, Item> _itensNoChao = new();
     private MapaDaMasmorra? _mapaDaVila;
     private IReadOnlyList<Sala> _salasDaVila = Array.Empty<Sala>();
@@ -62,6 +67,7 @@ public sealed partial class EstadoDoJogo
     private bool _existeCasaNaVila;
     private bool _primeiroAbrigoConstruido;
     private readonly List<(Posicao Posicao, int TurnoDeExpiracao)> _fogueirasAtivas = new();
+    private readonly Dictionary<Posicao, int> _proximaColheitaDisponivel = new();
 
     private int _largura;
     private int _altura;
@@ -76,6 +82,7 @@ public sealed partial class EstadoDoJogo
     public Personagem Personagem => _personagens[_indiceSelecionado];
     public IReadOnlyList<Personagem> Personagens => _personagens;
     public int IndiceSelecionado => _indiceSelecionado;
+    public int Madeira { get; private set; }
     public IEnumerable<Personagem> PersonagensNoLocalAtual =>
         LocalAtual == TipoDeLocal.Vila ? _personagens : new[] { Personagem };
     public IReadOnlyList<Bicho> BichosNoLocalAtual => LocalAtual == TipoDeLocal.Vila ? _bichos : Array.Empty<Bicho>();
@@ -84,6 +91,7 @@ public sealed partial class EstadoDoJogo
     public IReadOnlySet<Posicao> CelulasVisiveis { get; private set; } = new HashSet<Posicao>();
     public bool TodosVisiveis { get; private set; }
     public IReadOnlyList<string> Mensagens => _mensagens;
+    public IReadOnlyList<string> Conversas => _conversas;
     public bool Morto => Personagem.Vida <= 0;
     public int Turno => _turno;
     public bool EhDia => (_turno / TurnosPorMetadeDoDia) % 2 == 0;
@@ -318,12 +326,25 @@ public sealed partial class EstadoDoJogo
                 else
                     TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
             }
-            else if (!EstaProtegidoDoFrio(p))
+            else
             {
-                // ocioso e longe de qualquer abrigo -- espalha uma fogueira aqui mesmo em vez de so
-                // guardar madeira parada. Isso vai deixando fogueiras pelo caminho que o casal
-                // realmente percorre (caça, sono), cobrindo areas que a casa unica nunca alcancaria
-                TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
+                // divisao de trabalho: com a casa pronta, nao faz mais sentido os dois ficarem atras
+                // de madeira ao mesmo tempo (agora e um estoque so, nao precisam duplicar esforco) --
+                // quem estiver com a fome mais alta no momento (mesmo que ainda nao seja urgente) cai
+                // pra cacar com antecedencia, guardando comida pra quando precisar de verdade; o outro
+                // cuida de manter fogueiras por perto
+                var outro = _personagens.FirstOrDefault(o => !ReferenceEquals(o, p) && o.Vida > 0);
+                // empate de fome e o estado DEFAULT logo apos a casa ficar pronta (os dois sobem fome
+                // no mesmo ritmo ate alguem comer algo diferente) -- por isso o desempate por indice e
+                // essencial: sem ele, ">=" dos dois lados faz ambos decidirem "eu caco" no mesmo turno,
+                // ninguem sobra pra cuidar de fogueira, e a divisao de trabalho nunca chega a valer
+                var deveriaCacarPreventivamente = outro is not null &&
+                    (p.Fome > outro.Fome || (p.Fome == outro.Fome && _personagens.IndexOf(p) > _personagens.IndexOf(outro)));
+
+                if (deveriaCacarPreventivamente)
+                    TentarCacarPreventivamente(p);
+                else if (!EstaProtegidoDoFrio(p))
+                    TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
             }
         }
     }
@@ -338,13 +359,22 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
+        // uma arvore frutifera bem do lado e uma fonte de comida mais segura que perseguir um bicho --
+        // nao desvia o caminho pra ela, so aproveita se ja estiver por perto nesse exato momento
+        var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(p.Posicao);
+        if (arvoreFrutiferaAdjacente is { } arvoreFruta)
+        {
+            ColherArvoreAutonomamente(p, arvoreFruta);
+            return;
+        }
+
         // uma cacada pode levar pra bem longe de qualquer abrigo por muitos turnos seguidos, e a
         // temperatura despenca rapido demais (18 graus a 2/turno = so uns 9 turnos de folga) pra dar
         // tempo de reagir do zero -- se ja esta esfriando e desprotegido, desvia pra arvore mais
         // proxima e depois acende a fogueira ali mesmo, sem esperar a fome ceder prioridade pro frio
         if (p.Temperatura <= TemperaturaParaFogueiraDuranteACaca && !EstaProtegidoDoFrio(p))
         {
-            if (p.Madeira >= CustoDaFogueira)
+            if (Madeira >= CustoDaFogueira)
             {
                 if (ConstruirFogueiraSePossivel(p))
                     return;
@@ -354,7 +384,7 @@ public sealed partial class EstadoDoJogo
                 var arvoreAdjacente = ProcurarArvoreAdjacente(p.Posicao);
                 if (arvoreAdjacente is { } arvore)
                 {
-                    CortarArvoreAutonomamente(p, arvore);
+                    ColherArvoreAutonomamente(p, arvore);
                     return;
                 }
 
@@ -372,6 +402,20 @@ public sealed partial class EstadoDoJogo
             p.Posicao = destino;
     }
 
+    private void TentarCacarPreventivamente(Personagem p)
+    {
+        var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(p.Posicao);
+        if (arvoreFrutiferaAdjacente is { } arvoreFruta)
+        {
+            ColherArvoreAutonomamente(p, arvoreFruta);
+            return;
+        }
+
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
+        if (passo is { } destino)
+            p.Posicao = destino;
+    }
+
     private void TentarBuscarAbrigo(Personagem p)
     {
         if (EstaProtegidoDoFrio(p))
@@ -381,7 +425,7 @@ public sealed partial class EstadoDoJogo
         // sobra madeira na mochila, uma fogueira bem onde a pessoa esta e sempre mais segura e mais
         // rapida do que apostar numa volta pra casa, entao vira a resposta padrao ao frio, nao um
         // ultimo recurso; a casa/vila tem varias fogueiras espalhadas com o tempo por causa disso
-        if (p.Madeira >= CustoDaFogueira && ConstruirFogueiraSePossivel(p))
+        if (Madeira >= CustoDaFogueira && ConstruirFogueiraSePossivel(p))
             return;
 
         var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos =>
@@ -408,7 +452,7 @@ public sealed partial class EstadoDoJogo
 
     private void TentarObterMadeira(Personagem p, int custoNecessario, Action<Personagem> construir)
     {
-        if (p.Madeira >= custoNecessario)
+        if (Madeira >= custoNecessario)
         {
             construir(p);
             return;
@@ -417,7 +461,7 @@ public sealed partial class EstadoDoJogo
         var arvoreAdjacente = ProcurarArvoreAdjacente(p.Posicao);
         if (arvoreAdjacente is { } arvore)
         {
-            CortarArvoreAutonomamente(p, arvore);
+            ColherArvoreAutonomamente(p, arvore);
             return;
         }
 
@@ -431,7 +475,31 @@ public sealed partial class EstadoDoJogo
         foreach (var d in Direcoes)
         {
             var vizinho = pos + d;
-            if (_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) && _mapaDaVila[vizinho.X, vizinho.Y] == TipoDeCelula.Arvore)
+            if (_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) && EhArvoreColhivel(vizinho))
+                return vizinho;
+        }
+
+        return null;
+    }
+
+    private bool EhArvoreColhivel(Posicao pos)
+    {
+        var tipo = _mapaDaVila![pos.X, pos.Y];
+        if (tipo == TipoDeCelula.Arvore)
+            return true;
+
+        return tipo == TipoDeCelula.ArvoreFrutifera && PodeColherFruta(pos);
+    }
+
+    private bool PodeColherFruta(Posicao posicao) =>
+        !_proximaColheitaDisponivel.TryGetValue(posicao, out var turnoDisponivel) || _turno >= turnoDisponivel;
+
+    private Posicao? ProcurarArvoreFrutiferaAdjacente(Posicao pos)
+    {
+        foreach (var d in Direcoes)
+        {
+            var vizinho = pos + d;
+            if (_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) && _mapaDaVila[vizinho.X, vizinho.Y] == TipoDeCelula.ArvoreFrutifera && PodeColherFruta(vizinho))
                 return vizinho;
         }
 
@@ -440,11 +508,22 @@ public sealed partial class EstadoDoJogo
 
     private bool EstaAdjacenteAArvore(Posicao pos) => ProcurarArvoreAdjacente(pos) is not null;
 
-    private void CortarArvoreAutonomamente(Personagem p, Posicao arvore)
+    private void ColherArvoreAutonomamente(Personagem p, Posicao arvore)
     {
-        _mapaDaVila![arvore.X, arvore.Y] = TipoDeCelula.Grama;
-        p.Madeira += MadeiraPorArvore;
+        if (_mapaDaVila![arvore.X, arvore.Y] == TipoDeCelula.ArvoreFrutifera)
+        {
+            Madeira += MadeiraPorArvoreFrutifera;
+            p.Mochila.Add(new Item("Fruta", TipoDeItem.Comida, ValorDaFruta));
+            _proximaColheitaDisponivel[arvore] = _turno + TurnosDeRegrowthDaFruta;
+            AdicionarMensagem($"{NomeDoAtor(p)} colhe frutas e ganha {MadeiraPorArvoreFrutifera} de madeira.");
+            FalarSobre(p, "fruta");
+            return;
+        }
+
+        _mapaDaVila[arvore.X, arvore.Y] = TipoDeCelula.Grama;
+        Madeira += MadeiraPorArvore;
         AdicionarMensagem($"{NomeDoAtor(p)} corta uma árvore e ganha {MadeiraPorArvore} de madeira.");
+        FalarSobre(p, "madeira");
     }
 
     private void TentarConstruirAutonomamente(Personagem p)
@@ -459,8 +538,9 @@ public sealed partial class EstadoDoJogo
                 continue;
 
             ConstruirCasa(_mapaDaVila!, area, portaNaParede, portaExterna);
-            p.Madeira -= TamanhoDaCasa * TamanhoDaCasa;
+            Madeira -= TamanhoDaCasa * TamanhoDaCasa;
             AdicionarMensagem($"{NomeDoAtor(p)} constrói uma casa.");
+            FalarSobre(p, "casa");
             return;
         }
     }
@@ -476,8 +556,9 @@ public sealed partial class EstadoDoJogo
                 continue;
 
             ConstruirFogueira(_mapaDaVila!, posicao);
-            p.Madeira -= CustoDaFogueira;
+            Madeira -= CustoDaFogueira;
             AdicionarMensagem($"{NomeDoAtor(p)} acende uma fogueira.");
+            FalarSobre(p, "fogueira");
             return true;
         }
 
@@ -555,6 +636,7 @@ public sealed partial class EstadoDoJogo
             _bichos.RemoveAt(i);
             cacador.Mochila.Add(new Item("Carne", TipoDeItem.Comida, ValorDaCarne));
             AdicionarMensagem($"{NomeDoAtor(cacador)} caça um animal e ganha carne.");
+            FalarSobre(cacador, "caca");
         }
     }
 
@@ -601,7 +683,7 @@ public sealed partial class EstadoDoJogo
             for (var y = 0; y < _mapaDaVila.Altura; y++)
             {
                 if (_mapaDaVila[x, y] == TipoDeCelula.Grama && _random.NextDouble() < ChanceDeRebrotaPorCelula)
-                    _mapaDaVila[x, y] = TipoDeCelula.Arvore;
+                    _mapaDaVila[x, y] = _random.NextDouble() < ChanceDeArvoreFrutiferaAoRebrotar ? TipoDeCelula.ArvoreFrutifera : TipoDeCelula.Arvore;
             }
         }
     }
@@ -632,7 +714,8 @@ public sealed partial class EstadoDoJogo
         var visiveis = new HashSet<Posicao>();
         if (Modo == ModoDeJogo.Observador)
         {
-            foreach (var p in PersonagensNoLocalAtual)
+            // um personagem morto nao enxerga nada -- so os vivos contribuem area visivel
+            foreach (var p in PersonagensNoLocalAtual.Where(p => p.Vida > 0))
                 visiveis.UnionWith(CampoDeVisao.Calcular(Mapa, p.Posicao, raio));
         }
         else
@@ -655,5 +738,29 @@ public sealed partial class EstadoDoJogo
         _mensagens.Add(texto);
         if (_mensagens.Count > MaximoDeMensagens)
             _mensagens.RemoveAt(0);
+    }
+
+    private static readonly Dictionary<string, string[]> FalasPorEvento = new()
+    {
+        ["madeira"] = new[] { "Mais um pouco de lenha pra gente.", "Essa árvore ainda tinha o que dar." },
+        ["fruta"] = new[] { "Que fruta gostosa, quer um pedaço?", "Essa árvore está sendo generosa com a gente." },
+        ["caca"] = new[] { "Consegui carne! Hoje a gente come bem.", "Essa caça não vai ser fácil de esquecer." },
+        ["comida"] = new[] { "Ufa, já estou bem melhor.", "Isso mata a fome por um bom tempo." },
+        ["casa"] = new[] { "Agora sim, um lar de verdade.", "Isso vai nos proteger bem melhor." },
+        ["fogueira"] = new[] { "Essa fogueira vai esquentar a gente direitinho.", "Um pouco de calor já ajuda bastante." },
+    };
+
+    private void FalarSobre(Personagem p, string evento)
+    {
+        var opcoes = FalasPorEvento[evento];
+        var fala = opcoes[_random.Next(opcoes.Length)];
+        AdicionarConversa($"{NomeDoAtor(p)}: {fala}");
+    }
+
+    private void AdicionarConversa(string texto)
+    {
+        _conversas.Add(texto);
+        if (_conversas.Count > MaximoDeMensagens)
+            _conversas.RemoveAt(0);
     }
 }

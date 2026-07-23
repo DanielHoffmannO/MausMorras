@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Mausmorras.Nucleo.Itens;
 using Mausmorras.Nucleo.Jogo;
 
@@ -19,6 +20,7 @@ public sealed class EstadoSalvo
     public int OuroJogador { get; set; }
     public int MadeiraJogador { get; set; }
     public int Turno { get; set; }
+    public int Madeira { get; set; }
     public ModoDeJogo Modo { get; set; } = ModoDeJogo.Jogando;
     public List<PersonagemSalvo> Personagens { get; set; } = new();
     public int IndiceSelecionado { get; set; }
@@ -34,6 +36,7 @@ public sealed class EstadoSalvo
     public List<BichoSalvo> Bichos { get; set; } = new();
     public List<FogueiraAtivaSalva> FogueirasAtivas { get; set; } = new();
     public bool PrimeiroAbrigoConstruido { get; set; }
+    public List<ColheitaPendenteSalva> ColheitasPendentes { get; set; } = new();
 }
 
 public sealed class PersonagemSalvo
@@ -43,7 +46,8 @@ public sealed class PersonagemSalvo
     public int Vida { get; set; }
     public int VidaMaxima { get; set; }
     public int Ouro { get; set; }
-    public int Madeira { get; set; }
+    [JsonPropertyName("Madeira")]
+    public int MadeiraLegado { get; set; } // saves do formato intermediario (madeira por personagem, antes dela virar estoque compartilhado) -- so serve pra migracao em EstadoDoJogo.Persistencia.cs, nao usado em mais nada
     public int Fome { get; set; }
     public int Temperatura { get; set; } = 33; // saves antigos (formato "Frio" 0-300) nao tem esse campo -- default 33 = ideal, ja que as escalas sao incompativeis e nao ha migracao sensata possivel
     public int Sono { get; set; }
@@ -65,6 +69,13 @@ public sealed class FogueiraAtivaSalva
     public int X { get; set; }
     public int Y { get; set; }
     public int TurnoDeExpiracao { get; set; }
+}
+
+public sealed class ColheitaPendenteSalva
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int TurnoDisponivel { get; set; }
 }
 
 public sealed class ItemSalvo

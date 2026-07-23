@@ -44,11 +44,13 @@ public sealed class GeradorDeVila
                     mapa[x, y] = TipoDeCelula.Chao;
     }
 
+    private const double FracaoDeArvoresFrutiferas = 0.2;
+
     private void EspalharArvores(MapaDaMasmorra mapa, Random random)
     {
         for (var x = 1; x < mapa.Largura - 1; x++)
             for (var y = 1; y < mapa.Altura - 1; y++)
                 if (mapa[x, y] == TipoDeCelula.Grama && random.NextDouble() < _densidadeDeArvores)
-                    mapa[x, y] = TipoDeCelula.Arvore;
+                    mapa[x, y] = random.NextDouble() < FracaoDeArvoresFrutiferas ? TipoDeCelula.ArvoreFrutifera : TipoDeCelula.Arvore;
     }
 }

@@ -21,7 +21,7 @@ public sealed partial class EstadoDoJogo
         }
 
         var custo = area.Largura * area.Altura;
-        if (Personagem.Madeira < custo)
+        if (Madeira < custo)
         {
             AdicionarMensagem($"Madeira insuficiente para construir (precisa de {custo}).");
             return false;
@@ -29,8 +29,9 @@ public sealed partial class EstadoDoJogo
 
         var portaNaParede = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, DistanciaDaCasaAoPersonagem);
         ConstruirCasa(Mapa, area, portaNaParede, portaExterna);
-        Personagem.Madeira -= custo;
+        Madeira -= custo;
         AdicionarMensagem("Você constrói uma casa.");
+        FalarSobre(Personagem, "casa");
         AvancarTurno();
         return true;
     }
@@ -41,7 +42,7 @@ public sealed partial class EstadoDoJogo
         var portaExterna = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, 1);
         var custo = area.Largura * area.Altura;
         var valida = LocalAtual == TipoDeLocal.Vila && AreaLivreParaConstrucao(Mapa, area) && TerrenoConstruivel(Mapa, portaExterna)
-                     && Personagem.Madeira >= custo && AreaLivreDePersonagens(area, portaExterna, Personagem);
+                     && Madeira >= custo && AreaLivreDePersonagens(area, portaExterna, Personagem);
         return (area, portaExterna, valida);
     }
 
@@ -120,15 +121,16 @@ public sealed partial class EstadoDoJogo
             return false;
         }
 
-        if (Personagem.Madeira < CustoDaFogueira)
+        if (Madeira < CustoDaFogueira)
         {
             AdicionarMensagem($"Madeira insuficiente para construir (precisa de {CustoDaFogueira}).");
             return false;
         }
 
         ConstruirFogueira(Mapa, posicao);
-        Personagem.Madeira -= CustoDaFogueira;
+        Madeira -= CustoDaFogueira;
         AdicionarMensagem("Você constrói uma fogueira.");
+        FalarSobre(Personagem, "fogueira");
         AvancarTurno();
         return true;
     }
@@ -137,7 +139,7 @@ public sealed partial class EstadoDoJogo
     {
         var posicao = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, 1);
         var valida = LocalAtual == TipoDeLocal.Vila && TerrenoConstruivel(Mapa, posicao)
-                     && Personagem.Madeira >= CustoDaFogueira && !PosicaoOcupadaPorOutroPersonagem(posicao, Personagem);
+                     && Madeira >= CustoDaFogueira && !PosicaoOcupadaPorOutroPersonagem(posicao, Personagem);
         return (posicao, valida);
     }
 

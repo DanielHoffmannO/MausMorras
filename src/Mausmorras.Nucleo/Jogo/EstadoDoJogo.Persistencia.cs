@@ -18,6 +18,7 @@ public sealed partial class EstadoDoJogo
             Andar = Andar,
             Turno = _turno,
             Modo = Modo,
+            Madeira = Madeira,
             Personagens = _personagens.Select(ParaSalvoPersonagem).ToList(),
             IndiceSelecionado = _indiceSelecionado,
             Celulas = new int[Mapa.Largura * Mapa.Altura],
@@ -28,7 +29,8 @@ public sealed partial class EstadoDoJogo
                 .ToList(),
             Bichos = _bichos.Select(b => new BichoSalvo { X = b.Posicao.X, Y = b.Posicao.Y }).ToList(),
             FogueirasAtivas = _fogueirasAtivas.Select(f => new FogueiraAtivaSalva { X = f.Posicao.X, Y = f.Posicao.Y, TurnoDeExpiracao = f.TurnoDeExpiracao }).ToList(),
-            PrimeiroAbrigoConstruido = _primeiroAbrigoConstruido
+            PrimeiroAbrigoConstruido = _primeiroAbrigoConstruido,
+            ColheitasPendentes = _proximaColheitaDisponivel.Select(kv => new ColheitaPendenteSalva { X = kv.Key.X, Y = kv.Key.Y, TurnoDisponivel = kv.Value }).ToList()
         };
 
         for (var x = 0; x < Mapa.Largura; x++)
@@ -76,8 +78,7 @@ public sealed partial class EstadoDoJogo
             var legado = new Personagem(new Posicao(dto.JogadorX, dto.JogadorY), dto.VidaMaximaJogador)
             {
                 Vida = dto.VidaJogador,
-                Ouro = dto.OuroJogador,
-                Madeira = dto.MadeiraJogador
+                Ouro = dto.OuroJogador
             };
 
             legado.Mochila.AddRange(dto.Mochila.Select(DeSalvo));
@@ -97,6 +98,10 @@ public sealed partial class EstadoDoJogo
             _random = new Random(),
             _turno = dto.Turno,
             Modo = dto.Modo,
+            // ordem de fallback: estoque compartilhado novo -> formato antigo de personagem unico ->
+            // formato intermediario (madeira por personagem, ja removido de PersonagemSalvo mas ainda
+            // capturado via MadeiraLegado so pra nao perder o valor salvo de quem carregar esse save
+            Madeira = dto.Madeira != 0 ? dto.Madeira : dto.MadeiraJogador != 0 ? dto.MadeiraJogador : dto.Personagens.Sum(p => p.MadeiraLegado),
             Mapa = mapa,
             Salas = Array.Empty<Sala>(),
             _personagens = personagens,
@@ -129,6 +134,9 @@ public sealed partial class EstadoDoJogo
             // saves de antes desse campo existir nao tem PrimeiroAbrigoConstruido salvo (vem false) --
             // se ja existe casa ou fogueira nesse ponto, o bootstrap claramente ja passou
             estado._primeiroAbrigoConstruido = dto.PrimeiroAbrigoConstruido || estado._existeCasaNaVila || estado._fogueirasAtivas.Count > 0;
+
+            foreach (var c in dto.ColheitasPendentes)
+                estado._proximaColheitaDisponivel[new Posicao(c.X, c.Y)] = c.TurnoDisponivel;
         }
 
         estado._mensagens.AddRange(dto.Mensagens);
@@ -158,7 +166,6 @@ public sealed partial class EstadoDoJogo
         Vida = p.Vida,
         VidaMaxima = p.VidaMaxima,
         Ouro = p.Ouro,
-        Madeira = p.Madeira,
         Fome = p.Fome,
         Temperatura = p.Temperatura,
         Sono = p.Sono,
@@ -171,7 +178,7 @@ public sealed partial class EstadoDoJogo
 
     private static Personagem DeSalvoPersonagem(PersonagemSalvo s)
     {
-        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Madeira = s.Madeira, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono };
+        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono };
         p.Mochila.AddRange(s.Mochila.Select(DeSalvo));
         if (s.Capacete is { } c) p.Capacete = DeSalvo(c);
         if (s.Peitoral is { } pe) p.Peitoral = DeSalvo(pe);

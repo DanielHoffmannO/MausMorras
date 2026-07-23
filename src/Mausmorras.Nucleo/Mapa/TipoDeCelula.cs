@@ -19,5 +19,6 @@ public enum TipoDeCelula
     EntradaMasmorra,
     SaidaParaVila,
     PisoDaCasa,
-    Fogueira
+    Fogueira,
+    ArvoreFrutifera
 }

@@ -32,4 +32,5 @@ internal static class Cores
     public static readonly Color PreviaValida = new("#2d5a2d");
     public static readonly Color PreviaInvalida = new("#5a2d2d");
     public static readonly Color Fogueira = new("#e8833a");
+    public static readonly Color ArvoreFrutifera = new("#8a9f4a");
 }

@@ -78,5 +78,8 @@ public sealed partial class EstadoDoJogo
         AdicionarMensagem(reduzido > 0
             ? $"{NomeDoAtor(p)} come {item.Nome} e reduz {reduzido} de fome."
             : $"{NomeDoAtor(p)} come {item.Nome}, mas já não estava com fome.");
+
+        if (reduzido > 0)
+            FalarSobre(p, "comida");
     }
 }

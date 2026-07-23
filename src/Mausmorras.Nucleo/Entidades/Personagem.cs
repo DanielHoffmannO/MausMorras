@@ -9,7 +9,6 @@ public sealed class Personagem
     public int VidaMaxima { get; }
     public int Vida { get; set; }
     public int Ouro { get; set; }
-    public int Madeira { get; set; }
     public int Fome { get; set; }
     public int Temperatura { get; set; } = 33; // graus; 33 = ideal (ver EstadoDoJogo.TemperaturaIdeal)
     public int Sono { get; set; }

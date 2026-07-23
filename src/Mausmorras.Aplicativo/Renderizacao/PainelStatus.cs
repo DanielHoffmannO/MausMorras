@@ -34,7 +34,7 @@ public sealed class PainelStatus : PainelDeEstado
         }
 
         x = EscreverSegmento(x, $"  Ouro: {personagem.Ouro}", Cores.Ouro);
-        x = EscreverSegmento(x, $"  Madeira: {personagem.Madeira}", Cores.Casa);
+        x = EscreverSegmento(x, $"  Madeira: {estado.Madeira}", Cores.Casa);
         x = EscreverSegmento(x, $"  Fome: {personagem.Fome}", CorDaNecessidade(personagem.Fome, EstadoDoJogo.FomeMaxima));
         x = EscreverSegmento(x, $"  Temp: {personagem.Temperatura}°", CorDaTemperatura(personagem.Temperatura));
         x = EscreverSegmento(x, $"  Sono: {personagem.Sono}", CorDaNecessidade(personagem.Sono, EstadoDoJogo.SonoMaximo));
