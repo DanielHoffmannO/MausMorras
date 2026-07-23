@@ -11,7 +11,7 @@ var estado = new EstadoDoJogo(largura: 220, altura: 110);
 
 var janela = new Window
 {
-    Title = "Mausmorras (setas ou WASD move, I inventário, M minimapa, C constrói, F5 salva, F9 carrega, Esc sai)"
+    Title = "Mausmorras (setas ou WASD move, I inventário, M minimapa, C constrói, Tab troca pessoa, Espaço alterna modo, F5 salva, F9 carrega, Esc sai)"
 };
 
 var visaoDoMapa = new VisaoDoMapa(estado, caminhoDoSave);

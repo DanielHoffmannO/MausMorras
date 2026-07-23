@@ -8,11 +8,16 @@ public sealed class VisaoDoMapa : View
 {
     private const double IntensidadeEscurecimento = 0.55;
     private static readonly TimeSpan JanelaDeCliqueDuplo = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan IntervaloTempoReal = TimeSpan.FromMilliseconds(400);
 
     private readonly string _caminhoDoSave;
     private EstadoDoJogo _estado;
     private bool _previaAtiva;
     private DateTime _ultimoCliqueDoC;
+    private object? _timeoutTempoReal;
+
+    private readonly Dictionary<KeyCode, Func<bool>> _acoesPorTecla;
+    private readonly Dictionary<char, Func<bool>> _acoesPorLetra;
 
     public Action? AoAtualizar { get; set; }
     public Action? AoAbrirInventario { get; set; }
@@ -27,39 +32,65 @@ public sealed class VisaoDoMapa : View
         CanFocus = true;
         Width = Dim.Fill();
         Height = Dim.Fill();
+
+        _acoesPorTecla = new Dictionary<KeyCode, Func<bool>>
+        {
+            [KeyCode.Esc] = Sair,
+            [KeyCode.F5] = Salvar,
+            [KeyCode.F9] = Carregar,
+            [KeyCode.Space] = AlternarModo,
+            [KeyCode.Tab] = () => _estado.SelecionarProximoPersonagem(),
+            [KeyCode.CursorUp] = () => _estado.TentarMoverPersonagem(Direcao.Norte),
+            [KeyCode.CursorDown] = () => _estado.TentarMoverPersonagem(Direcao.Sul),
+            [KeyCode.CursorLeft] = () => _estado.TentarMoverPersonagem(Direcao.Oeste),
+            [KeyCode.CursorRight] = () => _estado.TentarMoverPersonagem(Direcao.Leste),
+        };
+
+        _acoesPorLetra = new Dictionary<char, Func<bool>>
+        {
+            ['i'] = AbrirInventario,
+            ['m'] = AlternarMiniMapa,
+            ['c'] = AlternarOuConstruir,
+            ['w'] = () => _estado.TentarMoverPersonagem(Direcao.Norte),
+            ['s'] = () => _estado.TentarMoverPersonagem(Direcao.Sul),
+            ['a'] = () => _estado.TentarMoverPersonagem(Direcao.Oeste),
+            ['d'] = () => _estado.TentarMoverPersonagem(Direcao.Leste),
+        };
     }
 
-    private static (Rune Glifo, Color CorFrente) ObterVisualDaCelula(TipoDeCelula celula) => celula switch
+    private static readonly Dictionary<TipoDeCelula, (Rune Glifo, Color CorFrente)> VisualPorCelula = new()
     {
-        TipoDeCelula.Parede => (new Rune('#'), Cores.Parede),
-        TipoDeCelula.ParedeDecorada => (new Rune('%'), Cores.ParedeDecorada),
-        TipoDeCelula.Chao => (new Rune('.'), Cores.Chao),
-        TipoDeCelula.Porta => (new Rune('+'), Cores.Porta),
-        TipoDeCelula.Escada => (new Rune('>'), Cores.Escada),
-        TipoDeCelula.Grama => (new Rune(','), Cores.Grama),
-        TipoDeCelula.Agua => (new Rune('~'), Cores.Agua),
-        TipoDeCelula.Entulho => (new Rune(':'), Cores.Entulho),
-        TipoDeCelula.Ouro => (new Rune('$'), Cores.Ouro),
-        TipoDeCelula.Item => (new Rune('!'), Cores.Item),
-        TipoDeCelula.Terra => (new Rune('"'), Cores.Terra),
-        TipoDeCelula.Pedra => (new Rune('o'), Cores.Pedra),
-        TipoDeCelula.Casa => (new Rune('⌂'), Cores.Casa),
-        TipoDeCelula.Arvore => (new Rune('♣'), Cores.Arvore),
-        TipoDeCelula.EntradaMasmorra => (new Rune('▼'), Cores.EntradaMasmorra),
-        TipoDeCelula.SaidaParaVila => (new Rune('▲'), Cores.SaidaParaVila),
-        _ => (new Rune('?'), Cores.Perigo)
+        [TipoDeCelula.Parede] = (new Rune('#'), Cores.Parede),
+        [TipoDeCelula.ParedeDecorada] = (new Rune('%'), Cores.ParedeDecorada),
+        [TipoDeCelula.Chao] = (new Rune('.'), Cores.Chao),
+        [TipoDeCelula.Porta] = (new Rune('+'), Cores.Porta),
+        [TipoDeCelula.Escada] = (new Rune('>'), Cores.Escada),
+        [TipoDeCelula.Grama] = (new Rune(','), Cores.Grama),
+        [TipoDeCelula.Agua] = (new Rune('~'), Cores.Agua),
+        [TipoDeCelula.Entulho] = (new Rune(':'), Cores.Entulho),
+        [TipoDeCelula.Ouro] = (new Rune('$'), Cores.Ouro),
+        [TipoDeCelula.Item] = (new Rune('!'), Cores.Item),
+        [TipoDeCelula.Terra] = (new Rune('"'), Cores.Terra),
+        [TipoDeCelula.Pedra] = (new Rune('o'), Cores.Pedra),
+        [TipoDeCelula.Casa] = (new Rune('⌂'), Cores.Casa),
+        [TipoDeCelula.Arvore] = (new Rune('♣'), Cores.Arvore),
+        [TipoDeCelula.EntradaMasmorra] = (new Rune('▼'), Cores.EntradaMasmorra),
+        [TipoDeCelula.SaidaParaVila] = (new Rune('▲'), Cores.SaidaParaVila),
     };
+
+    private static (Rune Glifo, Color CorFrente) ObterVisualDaCelula(TipoDeCelula celula) =>
+        VisualPorCelula.TryGetValue(celula, out var visual) ? visual : (new Rune('?'), Cores.Perigo);
 
     protected override bool OnDrawingContent(DrawContext context)
     {
         ClearViewport(context);
 
         var mapa = _estado.Mapa;
-        var jogador = _estado.Jogador.Posicao;
+        var personagem = _estado.Personagem.Posicao;
         var viewport = Viewport;
 
-        var camX = Math.Clamp(jogador.X - viewport.Width / 2, 0, Math.Max(0, mapa.Largura - viewport.Width));
-        var camY = Math.Clamp(jogador.Y - viewport.Height / 2, 0, Math.Max(0, mapa.Altura - viewport.Height));
+        var camX = Math.Clamp(personagem.X - viewport.Width / 2, 0, Math.Max(0, mapa.Largura - viewport.Width));
+        var camY = Math.Clamp(personagem.Y - viewport.Height / 2, 0, Math.Max(0, mapa.Altura - viewport.Height));
 
         for (var telaY = 0; telaY < viewport.Height; telaY++)
         {
@@ -87,8 +118,17 @@ public sealed class VisaoDoMapa : View
         if (_estado.LocalAtual == TipoDeLocal.Vila && _previaAtiva)
             DesenharPreviaDeConstrucao(mapa, camX, camY, viewport);
 
-        SetAttribute(new Attribute(Cores.Jogador, Cores.Fundo));
-        AddRune(jogador.X - camX, jogador.Y - camY, new Rune('@'));
+        foreach (var p in _estado.PersonagensNoLocalAtual)
+        {
+            var tx = p.Posicao.X - camX;
+            var ty = p.Posicao.Y - camY;
+            if (tx < 0 || tx >= viewport.Width || ty < 0 || ty >= viewport.Height)
+                continue;
+
+            var cor = ReferenceEquals(p, _estado.Personagem) ? Cores.Personagem : Cores.TextoSecundario;
+            SetAttribute(new Attribute(cor, Cores.Fundo));
+            AddRune(tx, ty, new Rune('@'));
+        }
 
         return true;
     }
@@ -120,71 +160,96 @@ public sealed class VisaoDoMapa : View
 
     protected override bool OnKeyDown(Key key)
     {
-        if (key.KeyCode == KeyCode.Esc)
-        {
-            Application.RequestStop();
-            return true;
-        }
+        if (_acoesPorTecla.TryGetValue(key.KeyCode, out var acaoPorTecla))
+            return Executar(acaoPorTecla);
 
-        if (key.KeyCode == KeyCode.F5)
-        {
-            _estado.Salvar(_caminhoDoSave);
-            SetNeedsDraw();
-            AoAtualizar?.Invoke();
-            return true;
-        }
-
-        if (key.KeyCode == KeyCode.F9)
-        {
-            if (File.Exists(_caminhoDoSave))
-            {
-                _estado = EstadoDoJogo.CarregarDe(_caminhoDoSave);
-                SetNeedsDraw();
-                AoAtualizar?.Invoke();
-            }
-
-            return true;
-        }
-
-        if (key.AsRune.Value is 'i' or 'I')
-        {
-            AoAbrirInventario?.Invoke();
-            return true;
-        }
-
-        if (key.AsRune.Value is 'm' or 'M')
-        {
-            AoAlternarMiniMapa?.Invoke();
-            return true;
-        }
-
-        if (key.AsRune.Value is 'c' or 'C')
-        {
-            AlternarOuConstruir();
-            return true;
-        }
-
-        var moveu = key.KeyCode switch
-        {
-            KeyCode.CursorUp => _estado.TentarMoverJogador(Direcao.Norte),
-            KeyCode.CursorDown => _estado.TentarMoverJogador(Direcao.Sul),
-            KeyCode.CursorLeft => _estado.TentarMoverJogador(Direcao.Oeste),
-            KeyCode.CursorRight => _estado.TentarMoverJogador(Direcao.Leste),
-            _ => TratarTeclasDeLetra(key)
-        };
-
-        if (moveu)
-        {
-            SetNeedsDraw();
-            AoAtualizar?.Invoke();
-            return true;
-        }
+        var letra = char.ToLowerInvariant((char)key.AsRune.Value);
+        if (_acoesPorLetra.TryGetValue(letra, out var acaoPorLetra))
+            return Executar(acaoPorLetra);
 
         return base.OnKeyDown(key);
     }
 
-    private void AlternarOuConstruir()
+    private bool Executar(Func<bool> acao)
     {
+        if (acao())
+        {
+            SetNeedsDraw();
+            AoAtualizar?.Invoke();
+        }
+
+        return true;
+    }
+
+    private bool Sair()
+    {
+        Application.RequestStop();
+        return false;
+    }
+
+    private bool Salvar()
+    {
+        _estado.Salvar(_caminhoDoSave);
+        return true;
+    }
+
+    private bool Carregar()
+    {
+        if (!File.Exists(_caminhoDoSave))
+            return false;
+
+        _estado = EstadoDoJogo.CarregarDe(_caminhoDoSave);
+        if (_estado.Modo == ModoDeJogo.Observador) IniciarTempoReal(); else PararTempoReal();
+        return true;
+    }
+
+    private bool AlternarModo()
+    {
+        _estado.AlternarModo();
+        if (_estado.Modo == ModoDeJogo.Observador) IniciarTempoReal(); else PararTempoReal();
+        return true;
+    }
+
+    private bool AbrirInventario()
+    {
+        AoAbrirInventario?.Invoke();
+        return false;
+    }
+
+    private bool AlternarMiniMapa()
+    {
+        AoAlternarMiniMapa?.Invoke();
+        return false;
+    }
+
+    private void IniciarTempoReal()
+    {
+        if (_timeoutTempoReal is not null)
+            return;
+
+        _timeoutTempoReal = Application.AddTimeout(IntervaloTempoReal, () =>
+        {
+            _estado.AvancarTurno();
+            SetNeedsDraw();
+            AoAtualizar?.Invoke();
+            return _estado.Modo == ModoDeJogo.Observador;
+        });
+    }
+
+    private void PararTempoReal()
+    {
+        if (_timeoutTempoReal is null)
+            return;
+
+        Application.RemoveTimeout(_timeoutTempoReal);
+        _timeoutTempoReal = null;
+    }
+
+    private bool AlternarOuConstruir()
+    {
+        if (_estado.Modo != ModoDeJogo.Jogando)
+            return false;
+
         var agora = DateTime.UtcNow;
         var cliqueDuplo = _previaAtiva && agora - _ultimoCliqueDoC <= JanelaDeCliqueDuplo;
 
@@ -203,16 +268,6 @@ public sealed class VisaoDoMapa : View
         }
 
         _ultimoCliqueDoC = agora;
-        SetNeedsDraw();
-        AoAtualizar?.Invoke();
+        return true;
     }
-
-    private bool TratarTeclasDeLetra(Key key) => key.AsRune.Value switch
-    {
-        'w' or 'W' => _estado.TentarMoverJogador(Direcao.Norte),
-        's' or 'S' => _estado.TentarMoverJogador(Direcao.Sul),
-        'a' or 'A' => _estado.TentarMoverJogador(Direcao.Oeste),
-        'd' or 'D' => _estado.TentarMoverJogador(Direcao.Leste),
-        _ => false
-    };
 }

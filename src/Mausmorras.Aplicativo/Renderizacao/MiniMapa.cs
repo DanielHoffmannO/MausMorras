@@ -1,4 +1,5 @@
 using System.Text;
+using Mausmorras.Nucleo.Entidades;
 using Mausmorras.Nucleo.Jogo;
 using Mausmorras.Nucleo.Mapa;
 
@@ -42,20 +43,31 @@ public sealed class MiniMapa : PainelDeEstado
             }
         }
 
-        var jogadorMx = Math.Clamp((int)(estado.Jogador.Posicao.X / escalaX), 0, LarguraInterna - 1);
-        var jogadorMy = Math.Clamp((int)(estado.Jogador.Posicao.Y / escalaY), 0, AlturaInterna - 1);
+        foreach (var p in estado.PersonagensNoLocalAtual.Where(p => !ReferenceEquals(p, estado.Personagem)))
+            DesenharMarcador(p, Cores.TextoSecundario, escalaX, escalaY);
 
-        SetAttribute(new Attribute(Cores.Jogador, Cores.Fundo));
-        AddRune(jogadorMx + 1, jogadorMy + 1, new Rune('@'));
+        DesenharMarcador(estado.Personagem, Cores.Personagem, escalaX, escalaY);
     }
 
-    private static (Rune Glifo, Color Cor) ObterVisual(TipoDeCelula celula) => celula switch
+    private void DesenharMarcador(Personagem personagem, Color cor, double escalaX, double escalaY)
     {
-        TipoDeCelula.Parede or TipoDeCelula.ParedeDecorada => (new Rune(' '), Cores.Fundo),
-        TipoDeCelula.Escada => (new Rune('>'), Cores.Escada),
-        TipoDeCelula.Ouro => (new Rune('$'), Cores.Ouro),
-        TipoDeCelula.EntradaMasmorra => (new Rune('▼'), Cores.EntradaMasmorra),
-        TipoDeCelula.SaidaParaVila => (new Rune('▲'), Cores.SaidaParaVila),
-        _ => (new Rune('·'), Cores.TextoSecundario)
+        var mx = Math.Clamp((int)(personagem.Posicao.X / escalaX), 0, LarguraInterna - 1);
+        var my = Math.Clamp((int)(personagem.Posicao.Y / escalaY), 0, AlturaInterna - 1);
+
+        SetAttribute(new Attribute(cor, Cores.Fundo));
+        AddRune(mx + 1, my + 1, new Rune('@'));
+    }
+
+    private static readonly Dictionary<TipoDeCelula, (Rune Glifo, Color Cor)> VisualPorCelula = new()
+    {
+        [TipoDeCelula.Parede] = (new Rune(' '), Cores.Fundo),
+        [TipoDeCelula.ParedeDecorada] = (new Rune(' '), Cores.Fundo),
+        [TipoDeCelula.Escada] = (new Rune('>'), Cores.Escada),
+        [TipoDeCelula.Ouro] = (new Rune('$'), Cores.Ouro),
+        [TipoDeCelula.EntradaMasmorra] = (new Rune('▼'), Cores.EntradaMasmorra),
+        [TipoDeCelula.SaidaParaVila] = (new Rune('▲'), Cores.SaidaParaVila),
     };
+
+    private static (Rune Glifo, Color Cor) ObterVisual(TipoDeCelula celula) =>
+        VisualPorCelula.TryGetValue(celula, out var visual) ? visual : (new Rune('·'), Cores.TextoSecundario);
 }

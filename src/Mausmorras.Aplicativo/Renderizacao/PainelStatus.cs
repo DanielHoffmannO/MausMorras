@@ -12,12 +12,19 @@ public sealed class PainelStatus : PainelDeEstado
 
     protected override void Desenhar(EstadoDoJogo estado)
     {
-        var jogador = estado.Jogador;
+        var personagem = estado.Personagem;
         var textoLocal = estado.LocalAtual == TipoDeLocal.Vila ? " Vila  " : $" Andar {estado.Andar}  ";
         var x = EscreverSegmento(0, textoLocal, Cores.TextoPrincipal);
 
-        var corVida = estado.Morto ? Cores.Perigo : CorDaVida((double)jogador.Vida / jogador.VidaMaxima);
-        var textoVida = estado.Morto ? $"Vida: 0/{jogador.VidaMaxima} (MORTO)" : $"Vida: {jogador.Vida}/{jogador.VidaMaxima}";
+        var textoModo = estado.Modo == ModoDeJogo.Jogando ? "[Jogando]  " : "[Observador]  ";
+        var corModo = estado.Modo == ModoDeJogo.Jogando ? Cores.TextoPrincipal : Cores.VidaMedia;
+        x = EscreverSegmento(x, textoModo, corModo);
+
+        if (estado.Personagens.Count > 1)
+            x = EscreverSegmento(x, $"Pessoa {estado.IndiceSelecionado + 1}/{estado.Personagens.Count}  ", Cores.TextoPrincipal);
+
+        var corVida = estado.Morto ? Cores.Perigo : CorDaVida((double)personagem.Vida / personagem.VidaMaxima);
+        var textoVida = estado.Morto ? $"Vida: 0/{personagem.VidaMaxima} (MORTO)" : $"Vida: {personagem.Vida}/{personagem.VidaMaxima}";
         x = EscreverSegmento(x, textoVida, corVida);
 
         if (estado.LocalAtual == TipoDeLocal.Vila)
@@ -26,9 +33,9 @@ public sealed class PainelStatus : PainelDeEstado
             x = EscreverSegmento(x, estado.EhDia ? "  Dia" : "  Noite", corPeriodo);
         }
 
-        x = EscreverSegmento(x, $"  Ouro: {jogador.Ouro}", Cores.Ouro);
-        x = EscreverSegmento(x, $"  Madeira: {jogador.Madeira}", Cores.Casa);
-        EscreverSegmento(x, "  —  I inv, M mapa, C construir, F5/F9 salvar ", Cores.TextoSecundario);
+        x = EscreverSegmento(x, $"  Ouro: {personagem.Ouro}", Cores.Ouro);
+        x = EscreverSegmento(x, $"  Madeira: {personagem.Madeira}", Cores.Casa);
+        EscreverSegmento(x, "  —  I inv, M mapa, C construir, Tab troca pessoa, Espaço modo, F5/F9 salvar ", Cores.TextoSecundario);
     }
 
     private int EscreverSegmento(int x, string texto, Color cor)

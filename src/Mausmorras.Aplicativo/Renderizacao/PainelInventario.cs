@@ -33,6 +33,9 @@ public sealed class PainelInventario : PainelDeEstado
     private int _indiceEquipamento;
     private int _indiceMochila;
 
+    private readonly Dictionary<KeyCode, Action<EstadoDoJogo>> _acoesPorTecla;
+    private readonly Dictionary<char, Action<EstadoDoJogo>> _acoesPorLetra;
+
     public Action? AoFechar { get; set; }
     public Action? AoAtualizarOutros { get; set; }
 
@@ -41,13 +44,29 @@ public sealed class PainelInventario : PainelDeEstado
         CanFocus = true;
         Width = LarguraTotal;
         Height = AlturaTotal;
+
+        _acoesPorTecla = new Dictionary<KeyCode, Action<EstadoDoJogo>>
+        {
+            [KeyCode.Esc] = _ => Fechar(),
+            [KeyCode.Tab] = _ => TrocarColuna(),
+            [KeyCode.CursorUp] = estado => MoverSelecao(estado, -1),
+            [KeyCode.CursorDown] = estado => MoverSelecao(estado, 1),
+            [KeyCode.Enter] = Confirmar,
+            [KeyCode.Delete] = Descartar,
+        };
+
+        _acoesPorLetra = new Dictionary<char, Action<EstadoDoJogo>>
+        {
+            ['i'] = _ => Fechar(),
+            ['x'] = Descartar,
+        };
     }
 
     protected override void Desenhar(EstadoDoJogo estado)
     {
         this.DesenharMoldura(LarguraInterna, AlturaInterna, Cores.TextoPrincipal, "Inventário");
 
-        var jogador = estado.Jogador;
+        var personagem = estado.Personagem;
 
         SetAttribute(new Attribute(Cores.TextoPrincipal, Cores.Fundo));
         AddStr(2, 1, "Equipamento");
@@ -56,26 +75,26 @@ public sealed class PainelInventario : PainelDeEstado
         for (var i = 0; i < SlotsEquipamento.Length; i++)
         {
             var slot = SlotsEquipamento[i];
-            var item = jogador.ObterEquipado(slot);
+            var item = personagem.ObterEquipado(slot);
             var texto = $"{NomesSlot[slot]}: {(item is null ? "(vazio)" : item.Nome)}";
             DesenharLinha(2, 3 + i, texto, _coluna == Coluna.Equipamento && _indiceEquipamento == i);
         }
 
         SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
-        AddStr(2, 8, $"Defesa total: {jogador.DefesaTotal}");
-        AddStr(2, 9, $"Vida: {jogador.Vida}/{jogador.VidaMaxima}   Ouro: {jogador.Ouro}");
-        AddStr(2, 10, $"Madeira: {jogador.Madeira}");
+        AddStr(2, 8, $"Defesa total: {personagem.DefesaTotal}");
+        AddStr(2, 9, $"Vida: {personagem.Vida}/{personagem.VidaMaxima}   Ouro: {personagem.Ouro}");
+        AddStr(2, 10, $"Madeira: {personagem.Madeira}");
 
-        if (jogador.Mochila.Count == 0)
+        if (personagem.Mochila.Count == 0)
         {
             SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
             AddStr(34, 3, "(vazia)");
         }
         else
         {
-            for (var i = 0; i < jogador.Mochila.Count && i < AlturaInterna - 6; i++)
+            for (var i = 0; i < personagem.Mochila.Count && i < AlturaInterna - 6; i++)
             {
-                var texto = $"{i + 1}) {jogador.Mochila[i].Nome}";
+                var texto = $"{i + 1}) {personagem.Mochila[i].Nome}";
                 DesenharLinha(34, 3 + i, texto, _coluna == Coluna.Mochila && _indiceMochila == i);
             }
         }
@@ -100,44 +119,28 @@ public sealed class PainelInventario : PainelDeEstado
     {
         var estado = _obterEstado();
 
-        if (key.KeyCode == KeyCode.Esc || key.AsRune.Value is 'i' or 'I')
+        if (_acoesPorTecla.TryGetValue(key.KeyCode, out var acaoPorTecla))
         {
-            AoFechar?.Invoke();
+            acaoPorTecla(estado);
             return true;
         }
 
-        if (key.KeyCode == KeyCode.Tab)
+        var letra = char.ToLowerInvariant((char)key.AsRune.Value);
+        if (_acoesPorLetra.TryGetValue(letra, out var acaoPorLetra))
         {
-            _coluna = _coluna == Coluna.Equipamento ? Coluna.Mochila : Coluna.Equipamento;
-            SetNeedsDraw();
-            return true;
-        }
-
-        if (key.KeyCode == KeyCode.CursorUp)
-        {
-            MoverSelecao(estado, -1);
-            return true;
-        }
-
-        if (key.KeyCode == KeyCode.CursorDown)
-        {
-            MoverSelecao(estado, 1);
-            return true;
-        }
-
-        if (key.KeyCode == KeyCode.Enter)
-        {
-            Confirmar(estado);
-            return true;
-        }
-
-        if (key.KeyCode == KeyCode.Delete || key.AsRune.Value is 'x' or 'X')
-        {
-            Descartar(estado);
+            acaoPorLetra(estado);
             return true;
         }
 
         return base.OnKeyDown(key);
+    }
+
+    private void Fechar() => AoFechar?.Invoke();
+
+    private void TrocarColuna()
+    {
+        _coluna = _coluna == Coluna.Equipamento ? Coluna.Mochila : Coluna.Equipamento;
+        SetNeedsDraw();
     }
 
     private void MoverSelecao(EstadoDoJogo estado, int delta)
@@ -148,7 +151,7 @@ public sealed class PainelInventario : PainelDeEstado
         }
         else
         {
-            var quantidade = estado.Jogador.Mochila.Count;
+            var quantidade = estado.Personagem.Mochila.Count;
             if (quantidade > 0)
                 _indiceMochila = Math.Clamp(_indiceMochila + delta, 0, quantidade - 1);
         }
@@ -158,10 +161,10 @@ public sealed class PainelInventario : PainelDeEstado
 
     private void Confirmar(EstadoDoJogo estado)
     {
-        if (_coluna == Coluna.Mochila && _indiceMochila < estado.Jogador.Mochila.Count)
+        if (_coluna == Coluna.Mochila && _indiceMochila < estado.Personagem.Mochila.Count)
         {
             estado.AcionarItemDaMochila(_indiceMochila);
-            _indiceMochila = Math.Clamp(_indiceMochila, 0, Math.Max(0, estado.Jogador.Mochila.Count - 1));
+            _indiceMochila = Math.Clamp(_indiceMochila, 0, Math.Max(0, estado.Personagem.Mochila.Count - 1));
         }
 
         SetNeedsDraw();
@@ -174,10 +177,10 @@ public sealed class PainelInventario : PainelDeEstado
         {
             estado.DescartarEquipado(SlotsEquipamento[_indiceEquipamento]);
         }
-        else if (_indiceMochila < estado.Jogador.Mochila.Count)
+        else if (_indiceMochila < estado.Personagem.Mochila.Count)
         {
             estado.DescartarDaMochila(_indiceMochila);
-            _indiceMochila = Math.Clamp(_indiceMochila, 0, Math.Max(0, estado.Jogador.Mochila.Count - 1));
+            _indiceMochila = Math.Clamp(_indiceMochila, 0, Math.Max(0, estado.Personagem.Mochila.Count - 1));
         }
 
         SetNeedsDraw();

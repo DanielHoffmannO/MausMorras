@@ -19,7 +19,7 @@ internal static class Cores
     public static readonly Color Arvore = new("#3f6b34");
     public static readonly Color EntradaMasmorra = new("#5a2e22");
     public static readonly Color SaidaParaVila = new("#7a5a3a");
-    public static readonly Color Jogador = new("#f2d675");
+    public static readonly Color Personagem = new("#f2d675");
     public static readonly Color TextoPrincipal = new("#e8e2d0");
     public static readonly Color TextoSecundario = new("#9a9488");
     public static readonly Color VidaAlta = new("#6a9b5e");

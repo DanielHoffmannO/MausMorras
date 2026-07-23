@@ -3,7 +3,7 @@ using Mausmorras.Nucleo.Mapa;
 
 namespace Mausmorras.Nucleo.Entidades;
 
-public sealed class Jogador
+public sealed class Personagem
 {
     public Posicao Posicao { get; set; }
     public int VidaMaxima { get; }
@@ -20,7 +20,7 @@ public sealed class Jogador
     public int DefesaTotal =>
         (Capacete?.Valor ?? 0) + (Peitoral?.Valor ?? 0) + (Pernas?.Valor ?? 0) + (Botas?.Valor ?? 0);
 
-    public Jogador(Posicao posicaoInicial, int vidaMaxima = 20)
+    public Personagem(Posicao posicaoInicial, int vidaMaxima = 20)
     {
         Posicao = posicaoInicial;
         VidaMaxima = vidaMaxima;
