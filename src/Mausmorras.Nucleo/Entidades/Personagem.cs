@@ -15,6 +15,12 @@ public sealed class Personagem
     public bool EhCrianca { get; set; }
     public int Idade { get; set; } // em turnos; so relevante enquanto EhCrianca
     public string? ObjetivoAtual { get; set; } // rotulo da necessidade que a IA autonoma esta perseguindo agora (ver EstadoDoJogo.PensarPersonagensAutonomos)
+    public string? DesejoAtual { get; set; } // vontade cosmetica do momento (ver EstadoDoJogo.ExpressarDesejo), so preenche tempo ocioso
+    public bool EstaComMedo { get; set; } // vida criticamente baixa -- rastreado so pra disparar a fala de medo uma unica vez, na transicao
+    public TracoDePersonalidade Traco { get; set; } = TracoDePersonalidade.Equilibrada;
+    public double AversaoAoFrio { get; set; }
+    public double AversaoAFome { get; set; }
+    public double AversaoAoSono { get; set; }
 
     public Item? Capacete { get; set; }
     public Item? Peitoral { get; set; }

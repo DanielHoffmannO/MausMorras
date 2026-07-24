@@ -93,14 +93,18 @@ public sealed partial class EstadoDoJogo
             for (var y = area.Y + 1; y < area.Y + area.Altura - 1; y++)
                 mapa[x, y] = TipoDeCelula.PisoDaCasa;
 
+        // cada casa e pra um casal (OcupantesPorCasa=2) -- duas camas nos cantos, o baú no centro.
+        // o baú de toda casa aponta pro mesmo estoque compartilhado (_bau), nao e um por casa
         mapa[area.X + 1, area.Y + 1] = TipoDeCelula.Cama;
-        mapa[area.X + area.Largura - 2, area.Y + 1] = TipoDeCelula.Bau;
+        mapa[area.X + area.Largura - 2, area.Y + 1] = TipoDeCelula.Cama;
+
+        mapa[area.X + area.Largura / 2, area.Y + area.Altura / 2] = TipoDeCelula.Bau;
 
         mapa[portaNaParede.X, portaNaParede.Y] = TipoDeCelula.Porta;
         mapa[portaExterna.X, portaExterna.Y] = TipoDeCelula.Porta;
         _existeCasaNaVila = true;
         _primeiroAbrigoConstruido = true;
-        _posicaoDaCasa = new Posicao(area.X + area.Largura / 2, area.Y + area.Altura / 2);
+        _numeroDeCasas++;
     }
 
     private void ConstruirFogueira(MapaDaMasmorra mapa, Posicao posicao)

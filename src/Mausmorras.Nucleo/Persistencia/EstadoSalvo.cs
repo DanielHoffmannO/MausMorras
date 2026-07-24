@@ -36,6 +36,7 @@ public sealed class EstadoSalvo
     public List<BichoSalvo> Bichos { get; set; } = new();
     public List<FogueiraAtivaSalva> FogueirasAtivas { get; set; } = new();
     public bool PrimeiroAbrigoConstruido { get; set; }
+    public int NumeroDeCasas { get; set; }
     public List<ColheitaPendenteSalva> ColheitasPendentes { get; set; } = new();
     public List<ItemSalvo> Bau { get; set; } = new();
 }
@@ -54,6 +55,10 @@ public sealed class PersonagemSalvo
     public int Sono { get; set; }
     public bool EhCrianca { get; set; }
     public int Idade { get; set; }
+    public int Traco { get; set; }
+    public double AversaoAoFrio { get; set; }
+    public double AversaoAFome { get; set; }
+    public double AversaoAoSono { get; set; }
     public List<ItemSalvo> Mochila { get; set; } = new();
     public ItemSalvo? Capacete { get; set; }
     public ItemSalvo? Peitoral { get; set; }

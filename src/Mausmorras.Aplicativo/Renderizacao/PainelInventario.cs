@@ -88,6 +88,7 @@ public sealed class PainelInventario : PainelDeEstado
         AddStr(2, 8, $"Defesa total: {personagem.DefesaTotal}");
         AddStr(2, 9, $"Vida: {personagem.Vida}/{personagem.VidaMaxima}   Ouro: {personagem.Ouro}");
         AddStr(2, 10, $"Madeira: {estado.Madeira}   Fome: {personagem.Fome}");
+        AddStr(2, 11, $"Traço: {personagem.Traco}");
 
         if (personagem.Mochila.Count == 0)
         {

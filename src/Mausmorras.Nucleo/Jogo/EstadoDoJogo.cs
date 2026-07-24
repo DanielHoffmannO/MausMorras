@@ -16,8 +16,9 @@ public sealed partial class EstadoDoJogo
     private const int RaioDeVisaoNoiteNaVila = 6;
     private const int MadeiraPorArvore = 5;
     private const int TamanhoDaCasa = 5;
-    private const int CustoDaMobilia = 5; // cama + bau
-    private const int CustoDaCasa = TamanhoDaCasa * TamanhoDaCasa + CustoDaMobilia; // 25 + 5 = 30
+    private const int OcupantesPorCasa = 2; // uma casa e pensada pra um casal -- se sobrar alguem sozinho, tambem pode ter a sua
+    private const int CustoDaMobilia = 5 * OcupantesPorCasa; // 2 camas (por casa, nao por populacao total) + o bau embutido no mesmo custo
+    private const int CustoDaCasa = TamanhoDaCasa * TamanhoDaCasa + CustoDaMobilia; // 25 + 10 = 35, por casa
     private const int DistanciaDaCasaAoPersonagem = 2; // 1 bloco de folga + a parede da casa
     private const double ChanceDeRebrotaPorCelula = 0.01;
     public const int FomeMaxima = 300; // ~2,5 dias de jogo (1 dia = 120 turnos)
@@ -47,6 +48,7 @@ public sealed partial class EstadoDoJogo
     private const int AlivioDoSonoNoturno = 8; // dormir de noite e o que realmente recupera o sono
     private const int SonoMinimoAoDescansar = 30; // dormir a noite toda nao zera o sono de vez -- sobra um residuo, como cansaço real
     private const int EstoqueDeComidaParaCompartilhar = 2; // a partir de quantos itens de comida o cacador comeca a repassar pro outro
+    private const int NumeroDeFundadores = 4; // era 2 -- vila comeca maior
     private const int VidaMaximaMinimaFundador = 22; // era 18 -- mais margem de sobrevivencia
     private const int VidaMaximaMaximaFundador = 28; // era 22
     private const int VidaMaximaMinimaCrianca = 10; // criancas comecam mais frageis que os fundadores
@@ -58,7 +60,22 @@ public sealed partial class EstadoDoJogo
     private const int RaioDeAlcanceDoBicho = 3; // distancia maxima da borda do mapa
     private const int TentativasDeNascimentoDeBichoPorDia = 3; // 1 por dia nao repunha rapido o bastante -- a populacao ia a zero em poucos dias de caca e nunca mais se recuperava, forcando cacadas cada vez mais longas ate a beira do mapa
     private const double MargemParaTrocarDeObjetivo = 0.15; // ver comentario em PensarPersonagensAutonomos -- evita trocar de objetivo por uma diferenca de severidade insignificante
+    private const double SeveridadeMinimaParaInterromperPorFrio = 0.5; // frio so ignora o compromisso quando ja esta REALMENTE severo, nao so acima do limiar pessoal (que o trauma pode deixar bem baixo) -- senao alguem com muita aversao fica preso perto do fogo, nunca se afasta tempo suficiente pra caçar, e acaba morrendo de fome do lado da fogueira
+    private const double LimiarVidaParaMedoDeMorrer = 0.3; // abaixo desse percentual de vida, o instinto de sobrevivencia ignora qualquer compromisso ou tarefa em andamento
     private const int DistanciaMaximaDeCacaDaCasa = 35; // acima disso, abandona a cacada/coleta e volta -- bichos so nascem perto da borda do mapa, e uma cacada longe demais pode nao terminar antes da noite cair. Valor alto de proposito: so existe pra evitar o caso extremo (perseguir um bicho ate a ponta oposta do mapa), nao pra limitar cacadas normais
+
+    // virtudes/tracos: cada pessoa nasce com um jeito de ser que ajusta o quanto ela arrisca
+    private const double AjusteDeLimiarCaseira = -0.15; // reage ao frio mais cedo, mais cautelosa
+    private const double AjusteDeLimiarAventureira = 0.15; // aguenta mais frio antes de se preocupar
+    private const int AjusteDeDistanciaCaseira = -10;
+    private const int AjusteDeDistanciaAventureira = 15;
+
+    // memoria: presenciar a morte de alguem da casa deixa os sobreviventes mais precavidos com a
+    // mesma causa -- "meu companheiro morreu de frio, agora tenho mais medo de frio"
+    private const double AjusteDeLimiarPorAversao = 0.1; // por ponto de aversao acumulada
+    private const int AjusteDeDistanciaPorAversaoAoFrio = 5;
+
+    private const double ChanceDeDesejoOcioso = 0.08; // chance por turno de expressar uma vontade cosmetica quando nao ha nada urgente nem produtivo pra fazer
     private const int ValorDaCarne = 80; // reduz esse tanto de Fome ao comer
     private const int MadeiraPorArvoreFrutifera = 2; // menos que a arvore normal (5) -- o foco aqui e a fruta
     private const int ValorDaFruta = 40; // metade da carne (80) -- alivio menor, mas nao precisa cacar
@@ -78,7 +95,7 @@ public sealed partial class EstadoDoJogo
     private bool _vilaTotalmenteExplorada;
     private bool _existeCasaNaVila;
     private bool _primeiroAbrigoConstruido;
-    private Posicao? _posicaoDaCasa; // usado so pra limitar a distancia de cacadas/coletas (ver DistanteDemaisDaCasa) -- aproximado de proposito, nao precisa ser o centro exato
+    private int _numeroDeCasas; // quantas casas ja foram construidas -- usado pra decidir se falta gente sem casa (ver NumeroDeCasasAlvo)
     private readonly List<(Posicao Posicao, int TurnoDeExpiracao)> _fogueirasAtivas = new();
     private readonly Dictionary<Posicao, int> _proximaColheitaDisponivel = new();
 
@@ -120,18 +137,21 @@ public sealed partial class EstadoDoJogo
 
         var spawn = PrepararVila();
 
-        // vida maxima nunca pode empatar entre os dois: como a fome sobe igual pra todo
+        // vida maxima nunca pode empatar entre dois fundadores: como a fome sobe igual pra todo
         // mundo, um empate faria os dois morrerem no mesmo turno, sem ninguem vivo pra
         // TransferirControleAoMorrer passar o controle adiante
-        var vidaMaximaFundador1 = VidaMaximaAleatoria();
-        int vidaMaximaFundador2;
-        do
+        var vidasMaximasUsadas = new List<int>();
+        for (var i = 0; i < NumeroDeFundadores; i++)
         {
-            vidaMaximaFundador2 = VidaMaximaAleatoria();
-        } while (vidaMaximaFundador2 == vidaMaximaFundador1);
+            int vidaMaxima;
+            do
+            {
+                vidaMaxima = VidaMaximaAleatoria();
+            } while (vidasMaximasUsadas.Contains(vidaMaxima));
+            vidasMaximasUsadas.Add(vidaMaxima);
 
-        _personagens.Add(new Personagem(spawn, vidaMaximaFundador1));
-        _personagens.Add(new Personagem(spawn + Direcao.Leste, vidaMaximaFundador2));
+            _personagens.Add(new Personagem(new Posicao(spawn.X + i, spawn.Y), vidaMaxima) { Traco = TracoAleatorio() });
+        }
         _indiceSelecionado = 0;
 
         for (var i = 0; i < PopulacaoAlvoDeBichos; i++)
@@ -146,6 +166,60 @@ public sealed partial class EstadoDoJogo
     }
 
     private int VidaMaximaAleatoria() => _random.Next(VidaMaximaMinimaFundador, VidaMaximaMaximaFundador + 1);
+
+    private TracoDePersonalidade TracoAleatorio() => (TracoDePersonalidade)_random.Next(3);
+
+    private double LimiarFrioEfetivo(Personagem p)
+    {
+        var ajusteTraco = p.Traco switch
+        {
+            TracoDePersonalidade.Caseira => AjusteDeLimiarCaseira,
+            TracoDePersonalidade.Aventureira => AjusteDeLimiarAventureira,
+            _ => 0.0
+        };
+        return Math.Clamp(LimiarTemperaturaParaBuscarAbrigo + ajusteTraco - p.AversaoAoFrio * AjusteDeLimiarPorAversao, 0.1, 0.9);
+    }
+
+    private double LimiarFomeEfetivo(Personagem p) =>
+        Math.Clamp(LimiarFomeParaBuscarComida - p.AversaoAFome * AjusteDeLimiarPorAversao, 0.1, 0.9);
+
+    private double LimiarSonoEfetivo(Personagem p) =>
+        Math.Clamp(LimiarSonoParaDormir - p.AversaoAoSono * AjusteDeLimiarPorAversao, 0.1, 0.9);
+
+    private int DistanciaMaximaEfetiva(Personagem p)
+    {
+        var ajusteTraco = p.Traco switch
+        {
+            TracoDePersonalidade.Caseira => AjusteDeDistanciaCaseira,
+            TracoDePersonalidade.Aventureira => AjusteDeDistanciaAventureira,
+            _ => 0
+        };
+        var ajusteAversao = (int)(p.AversaoAoFrio * AjusteDeDistanciaPorAversaoAoFrio);
+        return Math.Max(10, DistanciaMaximaDeCacaDaCasa + ajusteTraco - ajusteAversao);
+    }
+
+    // presenciar a morte de alguem da casa deixa quem sobrou mais precavido com a mesma causa
+    private void RegistrarTraumaPorMorte(Personagem falecido, string causa)
+    {
+        var sobreviventes = _personagens.Where(o => !ReferenceEquals(o, falecido) && o.Vida > 0).ToList();
+        if (sobreviventes.Count == 0)
+            return;
+
+        foreach (var sobrevivente in sobreviventes)
+        {
+            switch (causa)
+            {
+                case "frio": sobrevivente.AversaoAoFrio++; break;
+                case "fome": sobrevivente.AversaoAFome++; break;
+                case "sono": sobrevivente.AversaoAoSono++; break;
+            }
+        }
+
+        var nomeDaCausa = causa switch { "frio" => "frio", "fome" => "fome", _ => "cansaço" };
+        AdicionarMensagem(sobreviventes.Count > 1
+            ? $"Depois disso, os sobreviventes ficam mais precavidos com {nomeDaCausa}."
+            : $"Depois disso, quem sobrou fica mais precavido com {nomeDaCausa}.");
+    }
 
     public bool SelecionarProximoPersonagem()
     {
@@ -194,10 +268,10 @@ public sealed partial class EstadoDoJogo
         // sorteado um passo pra longe antes da checagem rodar
         VerificarCacaEncontros();
         MoverBichos();
-        AtualizarNecessidade(p => p.Fome, (p, v) => p.Fome = v, FomeMaxima, FomePorTurno, DanoPorFomeMaxima, "está faminta", "morreu de fome");
+        AtualizarNecessidade(p => p.Fome, (p, v) => p.Fome = v, FomeMaxima, FomePorTurno, DanoPorFomeMaxima, "está faminta", "morreu de fome", "fome");
         // criancas ficam de fora do rastreamento de sono (ver AtualizarNecessidade) -- elas nao tem
         // como chegar sozinhas na cama, entao contariam apenas como uma exaustao inevitavel
-        AtualizarNecessidade(p => p.Sono, (p, v) => p.Sono = v, SonoMaximo, SonoPorTurno, DanoPorSonoMaximo, "está com sono", "morreu de exaustão", AlivioDoSono, SonoMinimoAoDescansar, ignorarCriancas: true);
+        AtualizarNecessidade(p => p.Sono, (p, v) => p.Sono = v, SonoMaximo, SonoPorTurno, DanoPorSonoMaximo, "está com sono", "morreu de exaustão", "sono", AlivioDoSono, SonoMinimoAoDescansar, ignorarCriancas: true);
         AtualizarTemperatura();
         AtualizarFogueiras();
         TransferirControleAoMorrer();
@@ -241,7 +315,10 @@ public sealed partial class EstadoDoJogo
                 var vidaAntes = p.Vida;
                 p.Vida = Math.Max(0, p.Vida - DanoPorTemperaturaCritica);
                 if (vidaAntes > 0 && p.Vida == 0)
+                {
                     AdicionarMensagem($"{NomeDoAtor(p)} morreu de frio.");
+                    RegistrarTraumaPorMorte(p, "frio");
+                }
             }
         }
     }
@@ -282,6 +359,11 @@ public sealed partial class EstadoDoJogo
     // dele nao correspondem ao mapa da vila mesmo que numericamente coincidam com algo de la
     private bool EstaNaVila(Personagem p) => !ReferenceEquals(p, Personagem) || LocalAtual == TipoDeLocal.Vila;
 
+    // uma casa por casal (2 pessoas); sobrando alguem sozinho, ele tambem ganha a propria --
+    // 4 pessoas = 2 casas, 5 = 3, 6 = 3, 7 = 4 ...
+    private int NumeroDeCasasAlvo() =>
+        (int)Math.Ceiling(_personagens.Count(p => p.Vida > 0 && !p.EhCrianca) / (double)OcupantesPorCasa);
+
     private void PensarPersonagensAutonomos()
     {
         if (_mapaDaVila is null)
@@ -293,7 +375,7 @@ public sealed partial class EstadoDoJogo
                 continue;
 
             // criancas nao cacam/coletam nada sozinhas (alguem precisa perceber a fome delas e agir --
-            // ver TentarCuidarDaCriancaComFome, considerado abaixo pra cada adulto), mas comem o que ja
+            // ver TentarAjudarComFome, considerado abaixo pra cada adulto), mas comem o que ja
             // estiver na propria mochila assim que um adulto colocar algo la via DarComida
             if (p.EhCrianca)
             {
@@ -314,9 +396,17 @@ public sealed partial class EstadoDoJogo
             var sonoSeveridade = (double)p.Sono / SonoMaximo;
             var temperaturaSeveridade = Math.Clamp((double)(TemperaturaIdeal - p.Temperatura) / (TemperaturaIdeal - TemperaturaCritica), 0, 1);
 
-            var fomeUrgente = fomeSeveridade >= LimiarFomeParaBuscarComida;
-            var frioUrgente = temperaturaSeveridade >= LimiarTemperaturaParaBuscarAbrigo;
-            var sonoUrgente = sonoSeveridade >= LimiarSonoParaDormir;
+            var fomeUrgente = fomeSeveridade >= LimiarFomeEfetivo(p);
+            var frioUrgente = temperaturaSeveridade >= LimiarFrioEfetivo(p);
+            var sonoUrgente = sonoSeveridade >= LimiarSonoEfetivo(p);
+
+            // "medo de morrer": com a vida criticamente baixa, o instinto de sobrevivencia da pessoa
+            // ignora qualquer compromisso ou tarefa em andamento -- vira o unico foco ate se recuperar.
+            // a fala so dispara na transicao (nao tinha medo -> tem medo), nao a cada turno
+            var estaComMedo = (double)p.Vida / p.VidaMaxima <= LimiarVidaParaMedoDeMorrer;
+            if (estaComMedo && !p.EstaComMedo)
+                FalarSobre(p, "medo");
+            p.EstaComMedo = estaComMedo;
 
             // mesmo sem nenhuma necessidade critica ainda, comecar a voltar pro abrigo com
             // antecedencia (em vez de so reagir depois que o frio ja esta severo) e o que da tempo
@@ -332,11 +422,14 @@ public sealed partial class EstadoDoJogo
                 ? 1.0 - (double)turnosParaAnoitecer / AntecedenciaParaVoltarAntesDoAnoitecer
                 : 0.0;
 
-            // uma crianca com fome urgente conta como responsabilidade de qualquer adulto por perto --
-            // ela nao consegue se alimentar sozinha, entao precisa competir por prioridade igual as
-            // outras necessidades, senao so seria atendida quando nenhum adulto tivesse mais nada a fazer
-            var criancaComFome = _personagens.FirstOrDefault(c => c.Vida > 0 && c.EhCrianca && (double)c.Fome / FomeMaxima >= LimiarFomeParaBuscarComida);
-            var criancaFomeSeveridade = criancaComFome is not null ? (double)criancaComFome.Fome / FomeMaxima : 0.0;
+            // cooperacao: uma crianca com fome urgente sempre conta como responsabilidade de qualquer
+            // adulto por perto (ela nao consegue se alimentar sozinha), e agora um ADULTO com medo de
+            // morrer de fome tambem -- ninguem deveria morrer de fome sozinho tendo companhia por perto
+            // com comida sobrando. sem isso, so seria atendida quando nenhum adulto tivesse mais nada a fazer
+            var alguemPrecisandoDeComida = _personagens.FirstOrDefault(c =>
+                !ReferenceEquals(c, p) && c.Vida > 0 && (double)c.Fome / FomeMaxima >= LimiarFomeParaBuscarComida &&
+                (c.EhCrianca || (double)c.Vida / c.VidaMaxima <= LimiarVidaParaMedoDeMorrer));
+            var severidadeDeQuemPrecisa = alguemPrecisandoDeComida is not null ? (double)alguemPrecisandoDeComida.Fome / FomeMaxima : 0.0;
 
             // "compromisso de acao": uma vez que a pessoa comeca a perseguir uma necessidade, ela so
             // troca de alvo se outra ficar CLARAMENTE mais severa (margem abaixo). Sem isso, quando
@@ -351,7 +444,7 @@ public sealed partial class EstadoDoJogo
             // acha nenhuma Cama e nao faz nada
             if (sonoUrgente && _existeCasaNaVila) candidatos.Add(("sono", sonoSeveridade, () => TentarDormir(p)));
             if (anoitecerIminente) candidatos.Add(("anoitecer", severidadeAnoitecer, () => TentarBuscarAbrigo(p)));
-            if (criancaComFome is not null) candidatos.Add(("crianca", criancaFomeSeveridade, () => TentarCuidarDaCriancaComFome(p, criancaComFome!)));
+            if (alguemPrecisandoDeComida is not null) candidatos.Add(("cooperacao", severidadeDeQuemPrecisa, () => TentarAjudarComFome(p, alguemPrecisandoDeComida!)));
 
             Action? acaoVencedora = null;
 
@@ -360,10 +453,12 @@ public sealed partial class EstadoDoJogo
                 var maisSevero = candidatos.OrderByDescending(c => c.Severidade).First();
                 var candidatoAtual = candidatos.FirstOrDefault(c => c.Rotulo == p.ObjetivoAtual);
 
-                // frio (e o aviso antecipado de anoitecer) nunca ficam presos atras de um compromisso --
-                // sao os unicos riscos rapidos o bastante (temperatura critica em uns 9 turnos de
-                // exposicao) pra nao poder esperar a margem normal; fome/sono/crianca podem esperar
-                var ehUrgenciaDeFrio = maisSevero.Rotulo is "frio" or "anoitecer";
+                // frio (quando REALMENTE severo) e o aviso antecipado de anoitecer nunca ficam presos
+                // atras de um compromisso. "medo de morrer" tambem nao -- com a vida criticamente baixa,
+                // a propria sobrevivencia (fome/frio/sono) nunca fica presa atras de um compromisso antigo
+                var ehUrgenciaDeFrio = maisSevero.Rotulo == "anoitecer"
+                    || (maisSevero.Rotulo == "frio" && maisSevero.Severidade >= SeveridadeMinimaParaInterromperPorFrio)
+                    || (estaComMedo && maisSevero.Rotulo is "fome" or "frio" or "sono");
 
                 var escolhido = !ehUrgenciaDeFrio && candidatoAtual.Acao is not null
                     && maisSevero.Severidade - candidatoAtual.Severidade < MargemParaTrocarDeObjetivo
@@ -394,25 +489,51 @@ public sealed partial class EstadoDoJogo
             }
             else
             {
-                // divisao de trabalho: com a casa pronta, nao faz mais sentido os dois ficarem atras
+                // divisao de trabalho: com a casa pronta, nao faz mais sentido todo mundo ficar atras
                 // de madeira ao mesmo tempo (agora e um estoque so, nao precisam duplicar esforco) --
-                // quem estiver com a fome mais alta no momento (mesmo que ainda nao seja urgente) cai
-                // pra cacar com antecedencia, guardando comida pra quando precisar de verdade; o outro
-                // cuida de manter fogueiras por perto
-                var outro = _personagens.FirstOrDefault(o => !ReferenceEquals(o, p) && o.Vida > 0 && !o.EhCrianca);
-                // empate de fome e o estado DEFAULT logo apos a casa ficar pronta (os dois sobem fome
+                // so quem estiver com a fome mais alta do grupo (mesmo que ainda nao seja urgente) cai
+                // pra cacar com antecedencia, guardando comida pra quando precisar de verdade; os
+                // outros cuidam de manter fogueiras por perto. generalizado pra qualquer numero de
+                // adultos (nao so 2): compara contra o grupo inteiro, nao so contra "o outro"
+                // empate de fome e o estado DEFAULT logo apos a casa ficar pronta (todos sobem fome
                 // no mesmo ritmo ate alguem comer algo diferente) -- por isso o desempate por indice e
-                // essencial: sem ele, ">=" dos dois lados faz ambos decidirem "eu caco" no mesmo turno,
-                // ninguem sobra pra cuidar de fogueira, e a divisao de trabalho nunca chega a valer
-                var deveriaCacarPreventivamente = outro is not null &&
-                    (p.Fome > outro.Fome || (p.Fome == outro.Fome && _personagens.IndexOf(p) > _personagens.IndexOf(outro)));
+                // essencial: sem ele, empate faz todo mundo decidir "eu caco" no mesmo turno, ninguem
+                // sobra pra cuidar de fogueira, e a divisao de trabalho nunca chega a valer
+                //
+                // o numero de cacadores escala com o grupo (mesma proporcao de OcupantesPorCasa): com
+                // so 1 cacador fixo, 4 pessoas dividem a comida de 1 so caçador e a fome pessoal de
+                // quase todo mundo fica cronicamente alta, sem ninguem sobrando pra tarefas de menor
+                // prioridade (como construir a segunda casa) -- madeira nunca sobra pra isso
+                var adultosNaVila = _personagens.Where(o => o.Vida > 0 && !o.EhCrianca && EstaNaVila(o)).ToList();
+                var numeroDeCacadoresAlvo = (int)Math.Ceiling(adultosNaVila.Count / (double)OcupantesPorCasa);
+                var maisFamintosDoGrupo = adultosNaVila
+                    .OrderByDescending(o => o.Fome)
+                    .ThenByDescending(o => _personagens.IndexOf(o))
+                    .Take(numeroDeCacadoresAlvo)
+                    .ToHashSet();
+                var deveriaCacarPreventivamente = maisFamintosDoGrupo.Contains(p);
 
                 if (deveriaCacarPreventivamente)
                     TentarCacarPreventivamente(p);
+                else if (NumeroDeCasasAlvo() > _numeroDeCasas)
+                    TentarObterMadeira(p, CustoDaCasa, TentarConstruirAutonomamente);
                 else if (!EstaProtegidoDoFrio(p))
                     TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
+                else if (_random.NextDouble() < ChanceDeDesejoOcioso)
+                    ExpressarDesejo(p);
             }
         }
+    }
+
+    private static readonly string[] DesejosOciosos = { "explorar", "conversar", "descansar" };
+
+    // vontade puramente cosmetica, so preenche o tempo ocioso quando nao ha nada urgente nem
+    // produtivo pra fazer -- nao muda posicao nem necessidades, so da uma fala e um rotulo
+    private void ExpressarDesejo(Personagem p)
+    {
+        var desejo = DesejosOciosos[_random.Next(DesejosOciosos.Length)];
+        p.DesejoAtual = desejo;
+        FalarSobre(p, $"desejo_{desejo}");
     }
 
     private void TentarNascerCrianca()
@@ -446,7 +567,7 @@ public sealed partial class EstadoDoJogo
                 if (_random.NextDouble() >= ChanceDeNascimentoPorTurno)
                     return;
 
-                var crianca = new Personagem(posicaoNascimento, _random.Next(VidaMaximaMinimaCrianca, VidaMaximaMaximaCrianca + 1)) { EhCrianca = true };
+                var crianca = new Personagem(posicaoNascimento, _random.Next(VidaMaximaMinimaCrianca, VidaMaximaMaximaCrianca + 1)) { EhCrianca = true, Traco = TracoAleatorio() };
                 _personagens.Add(crianca);
                 AdicionarMensagem("Uma criança nasce na vila!");
                 FalarSobre(a, "nascimento");
@@ -482,44 +603,46 @@ public sealed partial class EstadoDoJogo
         }
     }
 
-    private void TentarCuidarDaCriancaComFome(Personagem pai, Personagem crianca)
+    // cobre tanto uma crianca faminta quanto um adulto com medo de morrer de fome -- ver
+    // alguemPrecisandoDeComida em PensarPersonagensAutonomos
+    private void TentarAjudarComFome(Personagem ajudante, Personagem alvo)
     {
-        var comida = pai.Mochila.FirstOrDefault(it => it.Tipo == TipoDeItem.Comida);
+        var comida = ajudante.Mochila.FirstOrDefault(it => it.Tipo == TipoDeItem.Comida);
         if (comida is not null)
         {
-            if (EstaAdjacente(pai.Posicao, crianca.Posicao))
+            if (EstaAdjacente(ajudante.Posicao, alvo.Posicao))
             {
-                DarComida(pai, crianca);
+                DarComida(ajudante, alvo);
                 return;
             }
 
-            var passoAteCrianca = Caminho.ProximoPasso(_mapaDaVila!, pai.Posicao, pos => pos == crianca.Posicao);
-            if (passoAteCrianca is { } destinoCrianca)
-                pai.Posicao = destinoCrianca;
+            var passoAteAlvo = Caminho.ProximoPasso(_mapaDaVila!, ajudante.Posicao, pos => pos == alvo.Posicao);
+            if (passoAteAlvo is { } destinoAlvo)
+                ajudante.Posicao = destinoAlvo;
             return;
         }
 
-        var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(pai.Posicao);
+        var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(ajudante.Posicao);
         if (arvoreFrutiferaAdjacente is { } arvoreFruta)
         {
-            ColherArvoreAutonomamente(pai, arvoreFruta);
+            ColherArvoreAutonomamente(ajudante, arvoreFruta);
             return;
         }
 
-        if (TentarProtegerDoFrioDuranteExpedicao(pai))
+        if (TentarProtegerDoFrioDuranteExpedicao(ajudante))
             return;
 
         // uma cacada nao pode arrastar a pessoa pra tao longe de casa que a volta antes da noite
         // vire inviavel -- melhor abandonar a comida da vez do que apostar a propria sobrevivencia
-        if (DistanteDemaisDaCasa(pai.Posicao))
+        if (DistanteDemaisDaCasa(ajudante))
         {
-            TentarBuscarAbrigo(pai);
+            TentarBuscarAbrigo(ajudante);
             return;
         }
 
-        var passoAteBicho = Caminho.ProximoPasso(_mapaDaVila!, pai.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
+        var passoAteBicho = Caminho.ProximoPasso(_mapaDaVila!, ajudante.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
         if (passoAteBicho is { } destinoBicho)
-            pai.Posicao = destinoBicho;
+            ajudante.Posicao = destinoBicho;
     }
 
     private void TentarResolverFome(Personagem p)
@@ -550,7 +673,7 @@ public sealed partial class EstadoDoJogo
 
         // uma cacada nao pode arrastar a pessoa pra tao longe de casa que a volta antes da noite
         // vire inviavel -- melhor abandonar a comida da vez do que apostar a propria sobrevivencia
-        if (DistanteDemaisDaCasa(p.Posicao))
+        if (DistanteDemaisDaCasa(p))
         {
             TentarBuscarAbrigo(p);
             return;
@@ -564,8 +687,29 @@ public sealed partial class EstadoDoJogo
     // extraido de TentarResolverFome -- qualquer expedicao que possa levar pra longe de casa por
     // muitos turnos (cacada, cacada preventiva, busca de comida pra crianca) precisa da MESMA rede
     // de seguranca, senao a pessoa so descobre que esta desprotegida quando ja e tarde demais
-    private bool DistanteDemaisDaCasa(Posicao pos) =>
-        _posicaoDaCasa is { } casa && Math.Abs(pos.X - casa.X) + Math.Abs(pos.Y - casa.Y) > DistanciaMaximaDeCacaDaCasa;
+    // agora que existem varias casas espalhadas (uma por casal), nao ha mais um unico ponto fixo
+    // de "casa" pra comparar distancia -- procura o abrigo mais proximo de verdade a cada checagem
+    private bool DistanteDemaisDaCasa(Personagem p)
+    {
+        if (_mapaDaVila is null)
+            return false;
+
+        var distanciaMinima = int.MaxValue;
+        for (var x = 0; x < _mapaDaVila.Largura; x++)
+        {
+            for (var y = 0; y < _mapaDaVila.Altura; y++)
+            {
+                if (_mapaDaVila[x, y] is not (TipoDeCelula.PisoDaCasa or TipoDeCelula.Cama or TipoDeCelula.Bau))
+                    continue;
+
+                var distancia = Math.Abs(p.Posicao.X - x) + Math.Abs(p.Posicao.Y - y);
+                if (distancia < distanciaMinima)
+                    distanciaMinima = distancia;
+            }
+        }
+
+        return distanciaMinima != int.MaxValue && distanciaMinima > DistanciaMaximaEfetiva(p);
+    }
 
     private bool TentarProtegerDoFrioDuranteExpedicao(Personagem p)
     {
@@ -631,7 +775,7 @@ public sealed partial class EstadoDoJogo
 
         // uma cacada nao pode arrastar a pessoa pra tao longe de casa que a volta antes da noite
         // vire inviavel -- melhor abandonar a comida da vez do que apostar a propria sobrevivencia
-        if (DistanteDemaisDaCasa(p.Posicao))
+        if (DistanteDemaisDaCasa(p))
         {
             TentarBuscarAbrigo(p);
             return;
@@ -897,7 +1041,7 @@ public sealed partial class EstadoDoJogo
         return mapaRelevante is not null && mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.Cama;
     }
 
-    private void AtualizarNecessidade(Func<Personagem, int> obter, Action<Personagem, int> definir, int maximo, int incremento, int dano, string mensagemNoMaximo, string mensagemDeMorte, Func<Personagem, int>? alivio = null, int minimo = 0, bool ignorarCriancas = false)
+    private void AtualizarNecessidade(Func<Personagem, int> obter, Action<Personagem, int> definir, int maximo, int incremento, int dano, string mensagemNoMaximo, string mensagemDeMorte, string causaDeTrauma, Func<Personagem, int>? alivio = null, int minimo = 0, bool ignorarCriancas = false)
     {
         for (var i = 0; i < _personagens.Count; i++)
         {
@@ -920,7 +1064,10 @@ public sealed partial class EstadoDoJogo
                 var vidaAntes = p.Vida;
                 p.Vida = Math.Max(0, p.Vida - dano);
                 if (vidaAntes > 0 && p.Vida == 0)
+                {
                     AdicionarMensagem($"A Pessoa {i + 1} {mensagemDeMorte}.");
+                    RegistrarTraumaPorMorte(p, causaDeTrauma);
+                }
             }
         }
     }
@@ -1002,6 +1149,10 @@ public sealed partial class EstadoDoJogo
         ["fogueira"] = new[] { "Essa fogueira vai esquentar a gente direitinho.", "Um pouco de calor já ajuda bastante." },
         ["comida_dada"] = new[] { "Toma, guarda isso pra você.", "Toma, você também deve estar com fome." },
         ["nascimento"] = new[] { "Vamos cuidar bem dessa criança.", "Nossa família está crescendo." },
+        ["desejo_explorar"] = new[] { "Tenho vontade de ir explorar um pouco.", "Queria ver o que tem masmorra adentro." },
+        ["desejo_conversar"] = new[] { "Vem cá, deixa eu te contar uma coisa.", "Só queria bater um papo." },
+        ["desejo_descansar"] = new[] { "Acho que vou só sentar um pouco.", "Não custa nada relaxar um instante." },
+        ["medo"] = new[] { "Eu não quero morrer, preciso me cuidar.", "Isso está ficando perigoso demais pra mim." },
     };
 
     private void FalarSobre(Personagem p, string evento)
