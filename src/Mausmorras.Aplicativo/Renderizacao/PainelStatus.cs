@@ -30,7 +30,7 @@ public sealed class PainelStatus : PainelDeEstado
         if (estado.LocalAtual == TipoDeLocal.Vila)
         {
             var corPeriodo = estado.EhDia ? Cores.TextoPrincipal : Cores.TextoSecundario;
-            x = EscreverSegmento(x, estado.EhDia ? "  Dia" : "  Noite", corPeriodo);
+            x = EscreverSegmento(x, estado.EhDia ? $"  Dia {estado.Dia}" : $"  Noite {estado.Dia}", corPeriodo);
         }
 
         x = EscreverSegmento(x, $"  Ouro: {personagem.Ouro}", Cores.Ouro);

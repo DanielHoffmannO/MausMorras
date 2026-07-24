@@ -52,6 +52,8 @@ public sealed class PersonagemSalvo
     public int Fome { get; set; }
     public int Temperatura { get; set; } = 33; // saves antigos (formato "Frio" 0-300) nao tem esse campo -- default 33 = ideal, ja que as escalas sao incompativeis e nao ha migracao sensata possivel
     public int Sono { get; set; }
+    public bool EhCrianca { get; set; }
+    public int Idade { get; set; }
     public List<ItemSalvo> Mochila { get; set; } = new();
     public ItemSalvo? Capacete { get; set; }
     public ItemSalvo? Peitoral { get; set; }

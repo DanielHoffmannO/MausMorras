@@ -149,9 +149,11 @@ public sealed class VisaoDoMapa : View
 
             var cor = p.Vida <= 0 ? Cores.TextoSecundario
                 : ReferenceEquals(p, _estado.Personagem) ? Cores.Personagem
+                : p.EhCrianca ? Cores.Crianca
                 : Cores.PersonagemVivo;
+            var glifo = p.Vida > 0 && p.EhCrianca ? new Rune('c') : new Rune('@');
             SetAttribute(new Attribute(cor, Cores.Fundo));
-            AddRune(tx, ty, new Rune('@'));
+            AddRune(tx, ty, glifo);
         }
 
         return true;

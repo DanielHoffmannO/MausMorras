@@ -122,6 +122,9 @@ public sealed partial class EstadoDoJogo
         if (estado._mapaDaVila is not null)
         {
             estado._existeCasaNaVila = ExisteCasaNoMapa(estado._mapaDaVila);
+            // _posicaoDaCasa nao e salva (so serve pra limitar distancia de cacada, nao precisa ser exata)
+            // -- um tile de Cama qualquer ja serve de referencia aproximada de onde fica a casa
+            estado._posicaoDaCasa = AcharPrimeiraPosicao(estado._mapaDaVila, TipoDeCelula.Cama);
             estado._fogueirasAtivas.AddRange(dto.FogueirasAtivas.Select(f => (new Posicao(f.X, f.Y), f.TurnoDeExpiracao)));
 
             // saves de antes dessa feature podem ter fogueira construída manualmente sem estar na lista --
@@ -162,6 +165,16 @@ public sealed partial class EstadoDoJogo
         return false;
     }
 
+    private static Posicao? AcharPrimeiraPosicao(MapaDaMasmorra mapa, TipoDeCelula tipo)
+    {
+        for (var x = 0; x < mapa.Largura; x++)
+            for (var y = 0; y < mapa.Altura; y++)
+                if (mapa[x, y] == tipo)
+                    return new Posicao(x, y);
+
+        return null;
+    }
+
     private static PersonagemSalvo ParaSalvoPersonagem(Personagem p) => new()
     {
         X = p.Posicao.X,
@@ -172,6 +185,8 @@ public sealed partial class EstadoDoJogo
         Fome = p.Fome,
         Temperatura = p.Temperatura,
         Sono = p.Sono,
+        EhCrianca = p.EhCrianca,
+        Idade = p.Idade,
         Mochila = p.Mochila.Select(ParaSalvo).ToList(),
         Capacete = p.Capacete is { } c ? ParaSalvo(c) : null,
         Peitoral = p.Peitoral is { } pe ? ParaSalvo(pe) : null,
@@ -181,7 +196,7 @@ public sealed partial class EstadoDoJogo
 
     private static Personagem DeSalvoPersonagem(PersonagemSalvo s)
     {
-        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono };
+        var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima) { Vida = s.Vida, Ouro = s.Ouro, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono, EhCrianca = s.EhCrianca, Idade = s.Idade };
         p.Mochila.AddRange(s.Mochila.Select(DeSalvo));
         if (s.Capacete is { } c) p.Capacete = DeSalvo(c);
         if (s.Peitoral is { } pe) p.Peitoral = DeSalvo(pe);

@@ -100,6 +100,7 @@ public sealed partial class EstadoDoJogo
         mapa[portaExterna.X, portaExterna.Y] = TipoDeCelula.Porta;
         _existeCasaNaVila = true;
         _primeiroAbrigoConstruido = true;
+        _posicaoDaCasa = new Posicao(area.X + area.Largura / 2, area.Y + area.Altura / 2);
     }
 
     private void ConstruirFogueira(MapaDaMasmorra mapa, Posicao posicao)

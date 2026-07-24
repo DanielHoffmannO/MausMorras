@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Mausmorras.Nucleo")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+250cc74adcd570a27634aa5e003651a9f4bf4902")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7e8d19e17ae3e32c8e2a8630cc8caa5d1e0d0c94")]
 [assembly: System.Reflection.AssemblyProductAttribute("Mausmorras.Nucleo")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Mausmorras.Nucleo")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

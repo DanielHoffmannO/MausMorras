@@ -12,6 +12,9 @@ public sealed class Personagem
     public int Fome { get; set; }
     public int Temperatura { get; set; } = 33; // graus; 33 = ideal (ver EstadoDoJogo.TemperaturaIdeal)
     public int Sono { get; set; }
+    public bool EhCrianca { get; set; }
+    public int Idade { get; set; } // em turnos; so relevante enquanto EhCrianca
+    public string? ObjetivoAtual { get; set; } // rotulo da necessidade que a IA autonoma esta perseguindo agora (ver EstadoDoJogo.PensarPersonagensAutonomos)
 
     public Item? Capacete { get; set; }
     public Item? Peitoral { get; set; }
