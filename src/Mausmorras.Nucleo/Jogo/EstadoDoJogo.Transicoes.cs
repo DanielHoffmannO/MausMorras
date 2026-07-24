@@ -18,7 +18,7 @@ public sealed partial class EstadoDoJogo
     {
         if (_mapaDaVila is null)
         {
-            var (mapaGerado, salasGeradas, _) = new GeradorDeVila().Gerar(LarguraDaVila, AlturaDaVila, _random);
+            var (mapaGerado, salasGeradas, _) = new GeradorDeVila().Gerar(LarguraDaVila, AlturaDaVila, _random, NumeroDeFundadores);
             _mapaDaVila = mapaGerado;
             _salasDaVila = salasGeradas;
         }

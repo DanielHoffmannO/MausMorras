@@ -10,7 +10,7 @@ public sealed class Personagem
     public int Vida { get; set; }
     public int Ouro { get; set; }
     public int Fome { get; set; }
-    public int Temperatura { get; set; } = 33; // graus; 33 = ideal (ver EstadoDoJogo.TemperaturaIdeal)
+    public int Temperatura { get; set; } = 30; // graus; ver EstadoDoJogo.TemperaturaIdeal para o valor ideal
     public int Sono { get; set; }
     public bool EhCrianca { get; set; }
     public int Idade { get; set; } // em turnos; so relevante enquanto EhCrianca

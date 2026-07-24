@@ -83,6 +83,15 @@ public sealed partial class EstadoDoJogo
     private bool TerrenoConstruivel(MapaDaMasmorra mapa, Posicao p) =>
         mapa.DentroDosLimites(p.X, p.Y) && mapa[p.X, p.Y] is TipoDeCelula.Grama or TipoDeCelula.Chao;
 
+    // fogueira e bem mais permissiva que casa -- pode em qualquer terreno aberto, so nao dentro da
+    // casa (piso/cama/bau/porta), em cima de outra fogueira, em terreno solido/agua, ou na entrada da masmorra
+    private bool TerrenoConstruivelParaFogueira(MapaDaMasmorra mapa, Posicao p) =>
+        mapa.DentroDosLimites(p.X, p.Y) && mapa[p.X, p.Y] is not (
+            TipoDeCelula.Parede or TipoDeCelula.ParedeDecorada or TipoDeCelula.Pedra or TipoDeCelula.Casa or
+            TipoDeCelula.Arvore or TipoDeCelula.ArvoreFrutifera or TipoDeCelula.Agua or
+            TipoDeCelula.PisoDaCasa or TipoDeCelula.Cama or TipoDeCelula.Bau or TipoDeCelula.Porta or
+            TipoDeCelula.Fogueira or TipoDeCelula.EntradaMasmorra);
+
     private void ConstruirCasa(MapaDaMasmorra mapa, Sala area, Posicao portaNaParede, Posicao portaExterna)
     {
         for (var x = area.X; x < area.X + area.Largura; x++)
@@ -121,7 +130,7 @@ public sealed partial class EstadoDoJogo
 
         var posicao = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, 1);
 
-        if (!TerrenoConstruivel(Mapa, posicao) || PosicaoOcupadaPorOutroPersonagem(posicao, Personagem))
+        if (!TerrenoConstruivelParaFogueira(Mapa, posicao) || PosicaoOcupadaPorOutroPersonagem(posicao, Personagem))
         {
             AdicionarMensagem("Não há espaço livre suficiente para construir aqui.");
             return false;
@@ -144,7 +153,7 @@ public sealed partial class EstadoDoJogo
     public (Posicao Posicao, bool Valida) ObterPreviaDeFogueira()
     {
         var posicao = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, 1);
-        var valida = LocalAtual == TipoDeLocal.Vila && TerrenoConstruivel(Mapa, posicao)
+        var valida = LocalAtual == TipoDeLocal.Vila && TerrenoConstruivelParaFogueira(Mapa, posicao)
                      && Madeira >= CustoDaFogueira && !PosicaoOcupadaPorOutroPersonagem(posicao, Personagem);
         return (posicao, valida);
     }

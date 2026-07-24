@@ -12,7 +12,7 @@ public sealed class GeradorDeVila
         _densidadeDeArvores = densidadeDeArvores;
     }
 
-    public (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas, IReadOnlyDictionary<Posicao, Item> Itens) Gerar(int largura, int altura, Random random)
+    public (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas, IReadOnlyDictionary<Posicao, Item> Itens) Gerar(int largura, int altura, Random random, int numeroDeFundadores = 1)
     {
         var mapa = new MapaDaMasmorra(largura, altura);
 
@@ -21,7 +21,10 @@ public sealed class GeradorDeVila
                 mapa[x, y] = TipoDeCelula.Grama;
 
         var spawn = new Posicao(largura / 2, altura / 2);
-        LimparPraca(mapa, spawn, 2);
+        // os fundadores nascem em linha reta a partir do spawn (spawn.X+i pra cada um) -- a praca
+        // precisa cobrir todos eles, senao os ultimos podem nascer em cima de uma arvore espalhada
+        // logo a seguir por EspalharArvores
+        LimparPraca(mapa, spawn, Math.Max(2, numeroDeFundadores - 1));
 
         var entrada = new Posicao(spawn.X, Math.Min(altura - 2, spawn.Y + 10));
         LimparPraca(mapa, entrada, 1);

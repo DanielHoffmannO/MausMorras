@@ -51,7 +51,7 @@ public sealed class PersonagemSalvo
     [JsonPropertyName("Madeira")]
     public int MadeiraLegado { get; set; } // saves do formato intermediario (madeira por personagem, antes dela virar estoque compartilhado) -- so serve pra migracao em EstadoDoJogo.Persistencia.cs, nao usado em mais nada
     public int Fome { get; set; }
-    public int Temperatura { get; set; } = 33; // saves antigos (formato "Frio" 0-300) nao tem esse campo -- default 33 = ideal, ja que as escalas sao incompativeis e nao ha migracao sensata possivel
+    public int Temperatura { get; set; } = EstadoDoJogo.TemperaturaIdeal; // saves antigos (formato "Frio" 0-300) nao tem esse campo -- default pro valor ideal atual, ja que as escalas sao incompativeis e nao ha migracao sensata possivel
     public int Sono { get; set; }
     public bool EhCrianca { get; set; }
     public int Idade { get; set; }

@@ -7,62 +7,64 @@ namespace Mausmorras.Nucleo.Jogo;
 
 public sealed partial class EstadoDoJogo
 {
-    private const int RaioDeVisao = 10;
+    private const int RaioDeVisao = 13;
     private const int MaximoDeMensagens = 200;
     private const int OuroPorPilha = 10;
-    private const int LarguraDaVila = 70;
-    private const int AlturaDaVila = 35;
-    private const int TurnosPorMetadeDoDia = 60;
-    private const int RaioDeVisaoNoiteNaVila = 6;
-    private const int MadeiraPorArvore = 5;
+    private const int LarguraDaVila = 80;
+    private const int AlturaDaVila = 50;
+    private const int TurnosPorMetadeDoDia = 80;
+    private const int RaioDeVisaoNoiteNaVila = 8;
+    private const int MadeiraPorArvore = 7;
     private const int TamanhoDaCasa = 5;
     private const int OcupantesPorCasa = 2; // uma casa e pensada pra um casal -- se sobrar alguem sozinho, tambem pode ter a sua
     private const int CustoDaMobilia = 5 * OcupantesPorCasa; // 2 camas (por casa, nao por populacao total) + o bau embutido no mesmo custo
     private const int CustoDaCasa = TamanhoDaCasa * TamanhoDaCasa + CustoDaMobilia; // 25 + 10 = 35, por casa
     private const int DistanciaDaCasaAoPersonagem = 2; // 1 bloco de folga + a parede da casa
     private const double ChanceDeRebrotaPorCelula = 0.01;
-    public const int FomeMaxima = 300; // ~2,5 dias de jogo (1 dia = 120 turnos)
+    public const int FomeMaxima = 300; // ~1,9 dias de jogo (1 dia = TurnosPorMetadeDoDia * 2 turnos)
     private const int FomePorTurno = 1;
     private const int DanoPorFomeMaxima = 1;
-    public const int TemperaturaIdeal = 33;
+    public const int TemperaturaIdeal = 30;
     public const int TemperaturaCritica = 15; // abaixo disso, comeca a tomar dano
-    private const int TemperaturaAmbienteDia = 32; // de dia, quase nao ha frio de verdade
-    private const int TemperaturaAmbienteNoite = 10; // de noite, esfria de verdade
-    private const int TemperaturaAmbienteCasa = 30;
+    private const int TemperaturaAmbienteDia = 36; // de dia, quase nao ha frio de verdade
+    private const int TemperaturaAmbienteNoite = 12; // de noite, esfria de verdade
+    private const int TemperaturaAmbienteCasa = 40;
     private const int TemperaturaAmbienteFogueira = 40;
     private const int TaxaDeTrocaDeCalor = 2; // quanto a temperatura anda por turno em direcao ao ambiente
     private const int DanoPorTemperaturaCritica = 1;
     private const double LimiarTemperaturaParaBuscarAbrigo = 0.35;
-    private const int RaioDaFogueira = 2; // raio de efeito, nao precisa estar EM cima
-    private const int CustoDaFogueira = 5; // uma arvore so -- a temperatura cai rapido demais (18 graus / 2 por turno) pra exigir duas
-    private const int RaioDeVisaoDaFogueira = 4; // menor que a visão noturna das pessoas (6) -- ilumina, não enxerga tudo
+    private const int RaioDaFogueira = 6; // raio de efeito, nao precisa estar EM cima
+    private const int CustoDaFogueira = 3; // uma arvore so -- a temperatura cai rapido demais (TemperaturaIdeal - TemperaturaCritica, a TaxaDeTrocaDeCalor por turno) pra exigir duas
+    private const int RaioDeVisaoDaFogueira = 5; // menor que RaioDeVisaoNoiteNaVila -- ilumina, nao enxerga tudo
     private const int AntecedenciaParaVoltarAntesDoAnoitecer = 25; // turnos de folga antes do fim do dia -- era 10, curto demais pra cacadas que vao ate a beira do mapa (bichos so nascem perto da borda)
-    private const int TemperaturaParaFogueiraDuranteACaca = 31; // logo abaixo do dia normal (32) -- dispara quase no instante em que a noite comeca a esfriar, maximizando o tempo de reacao
-    private const int DuracaoDaFogueira = 150; // um pouco mais que um ciclo dia/noite completo (120 turnos)
+    // um grau abaixo do ideal -- dispara assim que a severidade de frio deixa de ser zero (a mesma
+    // metrica usada em toda parte do jogo), maximizando o tempo de reacao antes que fique realmente perigoso
+    private const int TemperaturaParaFogueiraDuranteACaca = TemperaturaIdeal - 1;
+    private const int DuracaoDaFogueira = TurnosPorMetadeDoDia * 2 + 30; // um pouco mais que um ciclo dia/noite completo
 
     public const int SonoMaximo = 300;
     private const int SonoPorTurno = 1;
     private const int DanoPorSonoMaximo = 1;
     private const double LimiarSonoParaDormir = 0.2; // era 0.35 -- mais baixo que fome/frio de proposito, ja que dormir so alivia em casa, sem equivalente portatil tipo a fogueira, entao precisa de mais folga pra caminhada de volta
-    private const int AlivioDoSonoDiurno = 3; // dormir de dia ainda ajuda, mas bem menos que de noite
-    private const int AlivioDoSonoNoturno = 8; // dormir de noite e o que realmente recupera o sono
+    private const int AlivioDoSonoDiurno = 5; // dormir de dia ainda ajuda, mas bem menos que de noite
+    private const int AlivioDoSonoNoturno = 15; // dormir de noite e o que realmente recupera o sono
     private const int SonoMinimoAoDescansar = 30; // dormir a noite toda nao zera o sono de vez -- sobra um residuo, como cansaço real
     private const int EstoqueDeComidaParaCompartilhar = 2; // a partir de quantos itens de comida o cacador comeca a repassar pro outro
-    private const int NumeroDeFundadores = 4; // era 2 -- vila comeca maior
+    private const int NumeroDeFundadores = 5; // era 2 -- vila comeca maior
     private const int VidaMaximaMinimaFundador = 22; // era 18 -- mais margem de sobrevivencia
     private const int VidaMaximaMaximaFundador = 28; // era 22
     private const int VidaMaximaMinimaCrianca = 10; // criancas comecam mais frageis que os fundadores
     private const int VidaMaximaMaximaCrianca = 14; // variacao (em vez de um valor fixo) evita que duas criancas cresçam com VidaMaxima identica -- o mesmo risco de "empate mortal" que o do..while dos fundadores ja existe pra evitar
     private const int TurnosParaCrescer = 400; // ~3.3 dias de jogo ate um filho virar adulto
-    private const double ChanceDeNascimentoPorTurno = 0.03; // chance por turno quando as condicoes pra nascimento estao dadas
+    private const double ChanceDeNascimentoPorTurno = 0.05; // chance por turno quando as condicoes pra nascimento estao dadas
     private const double LimiarFomeParaBuscarComida = 0.35; // era 0.5 -- age mais cedo, sobra mais tempo de volta
-    private const int PopulacaoAlvoDeBichos = 6;
-    private const int RaioDeAlcanceDoBicho = 3; // distancia maxima da borda do mapa
+    private const int PopulacaoAlvoDeBichos = 12;
+    private const int RaioDeAlcanceDoBicho = 7; // distancia maxima da borda do mapa
     private const int TentativasDeNascimentoDeBichoPorDia = 3; // 1 por dia nao repunha rapido o bastante -- a populacao ia a zero em poucos dias de caca e nunca mais se recuperava, forcando cacadas cada vez mais longas ate a beira do mapa
     private const double MargemParaTrocarDeObjetivo = 0.15; // ver comentario em PensarPersonagensAutonomos -- evita trocar de objetivo por uma diferenca de severidade insignificante
     private const double SeveridadeMinimaParaInterromperPorFrio = 0.5; // frio so ignora o compromisso quando ja esta REALMENTE severo, nao so acima do limiar pessoal (que o trauma pode deixar bem baixo) -- senao alguem com muita aversao fica preso perto do fogo, nunca se afasta tempo suficiente pra caçar, e acaba morrendo de fome do lado da fogueira
     private const double LimiarVidaParaMedoDeMorrer = 0.3; // abaixo desse percentual de vida, o instinto de sobrevivencia ignora qualquer compromisso ou tarefa em andamento
-    private const int DistanciaMaximaDeCacaDaCasa = 35; // acima disso, abandona a cacada/coleta e volta -- bichos so nascem perto da borda do mapa, e uma cacada longe demais pode nao terminar antes da noite cair. Valor alto de proposito: so existe pra evitar o caso extremo (perseguir um bicho ate a ponta oposta do mapa), nao pra limitar cacadas normais
+    private const int DistanciaMaximaDeCacaDaCasa = LarguraDaVila / 2; // acima disso, abandona a cacada/coleta e volta -- bichos so nascem perto da borda do mapa, e uma cacada longe demais pode nao terminar antes da noite cair. Valor alto de proposito (escala com o tamanho da vila): so existe pra evitar o caso extremo (perseguir um bicho ate a ponta oposta do mapa), nao pra limitar cacadas normais
 
     // virtudes/tracos: cada pessoa nasce com um jeito de ser que ajusta o quanto ela arrisca
     private const double AjusteDeLimiarCaseira = -0.15; // reage ao frio mais cedo, mais cautelosa
@@ -76,10 +78,10 @@ public sealed partial class EstadoDoJogo
     private const int AjusteDeDistanciaPorAversaoAoFrio = 5;
 
     private const double ChanceDeDesejoOcioso = 0.08; // chance por turno de expressar uma vontade cosmetica quando nao ha nada urgente nem produtivo pra fazer
-    private const int ValorDaCarne = 80; // reduz esse tanto de Fome ao comer
-    private const int MadeiraPorArvoreFrutifera = 2; // menos que a arvore normal (5) -- o foco aqui e a fruta
-    private const int ValorDaFruta = 40; // metade da carne (80) -- alivio menor, mas nao precisa cacar
-    private const int TurnosDeRegrowthDaFruta = 60; // meio dia de folga antes de poder colher de novo no mesmo pe
+    private const int ValorDaCarne = 100; // reduz esse tanto de Fome ao comer
+    private const int MadeiraPorArvoreFrutifera = 2; // menos que MadeiraPorArvore -- o foco aqui e a fruta
+    private const int ValorDaFruta = 40; // bem menos que ValorDaCarne -- alivio menor, mas nao precisa cacar
+    private const int TurnosDeRegrowthDaFruta = TurnosPorMetadeDoDia; // meio dia de folga antes de poder colher de novo no mesmo pe
     private const double ChanceDeArvoreFrutiferaAoRebrotar = 0.2;
 
     private static readonly Posicao[] Direcoes = { Direcao.Norte, Direcao.Sul, Direcao.Leste, Direcao.Oeste };
@@ -603,6 +605,16 @@ public sealed partial class EstadoDoJogo
         }
     }
 
+    // todo movimento autonomo passa por aqui (em vez de atribuir p.Posicao direto) pra deixar
+    // rastro na grama igual o personagem controlado pelo jogador ja deixa em TentarMoverPersonagem --
+    // sem isso, so o jogador "pisava" a grama, e os outros personagens andavam sem deixar marca nenhuma
+    private void MoverPersonagemAutonomo(Personagem p, Posicao destino)
+    {
+        p.Posicao = destino;
+        if (_mapaDaVila![destino.X, destino.Y] == TipoDeCelula.Grama)
+            _mapaDaVila[destino.X, destino.Y] = TipoDeCelula.Chao;
+    }
+
     // cobre tanto uma crianca faminta quanto um adulto com medo de morrer de fome -- ver
     // alguemPrecisandoDeComida em PensarPersonagensAutonomos
     private void TentarAjudarComFome(Personagem ajudante, Personagem alvo)
@@ -618,7 +630,7 @@ public sealed partial class EstadoDoJogo
 
             var passoAteAlvo = Caminho.ProximoPasso(_mapaDaVila!, ajudante.Posicao, pos => pos == alvo.Posicao);
             if (passoAteAlvo is { } destinoAlvo)
-                ajudante.Posicao = destinoAlvo;
+                MoverPersonagemAutonomo(ajudante, destinoAlvo);
             return;
         }
 
@@ -642,7 +654,7 @@ public sealed partial class EstadoDoJogo
 
         var passoAteBicho = Caminho.ProximoPasso(_mapaDaVila!, ajudante.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
         if (passoAteBicho is { } destinoBicho)
-            ajudante.Posicao = destinoBicho;
+            MoverPersonagemAutonomo(ajudante, destinoBicho);
     }
 
     private void TentarResolverFome(Personagem p)
@@ -681,7 +693,7 @@ public sealed partial class EstadoDoJogo
 
         var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
         if (passo is { } destino)
-            p.Posicao = destino;
+            MoverPersonagemAutonomo(p, destino);
     }
 
     // extraido de TentarResolverFome -- qualquer expedicao que possa levar pra longe de casa por
@@ -733,7 +745,7 @@ public sealed partial class EstadoDoJogo
             var passoParaArvore = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, EstaAdjacenteAArvore);
             if (passoParaArvore is { } destinoArvore)
             {
-                p.Posicao = destinoArvore;
+                MoverPersonagemAutonomo(p, destinoArvore);
                 return true;
             }
         }
@@ -758,7 +770,7 @@ public sealed partial class EstadoDoJogo
             var passoAteOutro = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => pos == outro.Posicao);
             if (passoAteOutro is { } destinoOutro)
             {
-                p.Posicao = destinoOutro;
+                MoverPersonagemAutonomo(p, destinoOutro);
                 return;
             }
         }
@@ -783,7 +795,7 @@ public sealed partial class EstadoDoJogo
 
         var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
         if (passo is { } destino)
-            p.Posicao = destino;
+            MoverPersonagemAutonomo(p, destino);
     }
 
     private static int ContarComida(Personagem p) => p.Mochila.Count(it => it.Tipo == TipoDeItem.Comida);
@@ -823,7 +835,7 @@ public sealed partial class EstadoDoJogo
         var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos =>
             _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa || EstaPertoDeFogueira(_mapaDaVila, pos));
         if (passo is { } destino)
-            p.Posicao = destino;
+            MoverPersonagemAutonomo(p, destino);
     }
 
     private bool EstaProtegidoDoFrio(Personagem p)
@@ -840,7 +852,7 @@ public sealed partial class EstadoDoJogo
     {
         var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.Cama);
         if (passo is { } destino)
-            p.Posicao = destino;
+            MoverPersonagemAutonomo(p, destino);
     }
 
     private void TentarObterMadeira(Personagem p, int custoNecessario, Action<Personagem> construir)
@@ -860,7 +872,7 @@ public sealed partial class EstadoDoJogo
 
         var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, EstaAdjacenteAArvore);
         if (passo is { } destino)
-            p.Posicao = destino;
+            MoverPersonagemAutonomo(p, destino);
     }
 
     private Posicao? ProcurarArvoreAdjacente(Posicao pos)
@@ -945,7 +957,7 @@ public sealed partial class EstadoDoJogo
         foreach (var direcao in Direcoes)
         {
             var posicao = CalcularPosicaoNaDirecao(p.Posicao, direcao, 1);
-            if (!TerrenoConstruivel(_mapaDaVila!, posicao) || PosicaoOcupadaPorOutroPersonagem(posicao, p))
+            if (!TerrenoConstruivelParaFogueira(_mapaDaVila!, posicao) || PosicaoOcupadaPorOutroPersonagem(posicao, p))
                 continue;
 
             ConstruirFogueira(_mapaDaVila!, posicao);
@@ -1054,8 +1066,11 @@ public sealed partial class EstadoDoJogo
             if (valor < maximo)
             {
                 var mudanca = incremento - (alivio?.Invoke(p) ?? 0);
-                // alivio pode deixar a mudanca negativa (reducao ativa), entao precisa de piso alem do teto
-                definir(p, Math.Clamp(valor + mudanca, minimo, maximo));
+                // o piso so vale quando o alivio de descanso ativo empurra a mudanca pra negativo --
+                // sem essa condicao, alguem comecando do zero (recem-criado, nunca descansou) saltava
+                // direto pro piso no primeiro turno, simulando cansaco que nunca foi acumulado
+                var pisoEfetivo = mudanca < 0 ? minimo : 0;
+                definir(p, Math.Clamp(valor + mudanca, pisoEfetivo, maximo));
                 if (obter(p) == maximo)
                     AdicionarMensagem($"A Pessoa {i + 1} {mensagemNoMaximo}.");
             }
