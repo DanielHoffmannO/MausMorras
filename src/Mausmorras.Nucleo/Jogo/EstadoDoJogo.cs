@@ -1068,8 +1068,10 @@ public sealed partial class EstadoDoJogo
                 var mudanca = incremento - (alivio?.Invoke(p) ?? 0);
                 // o piso so vale quando o alivio de descanso ativo empurra a mudanca pra negativo --
                 // sem essa condicao, alguem comecando do zero (recem-criado, nunca descansou) saltava
-                // direto pro piso no primeiro turno, simulando cansaco que nunca foi acumulado
-                var pisoEfetivo = mudanca < 0 ? minimo : 0;
+                // direto pro piso no primeiro turno, simulando cansaco que nunca foi acumulado. e o
+                // piso nunca pode ser maior que o valor atual -- descansar so deve poder reduzir o
+                // valor (ou deixar como esta), nunca empurrar pra cima quem ja estava abaixo dele
+                var pisoEfetivo = mudanca < 0 ? Math.Min(minimo, valor) : 0;
                 definir(p, Math.Clamp(valor + mudanca, pisoEfetivo, maximo));
                 if (obter(p) == maximo)
                     AdicionarMensagem($"A Pessoa {i + 1} {mensagemNoMaximo}.");
