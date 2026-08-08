@@ -21,6 +21,10 @@ public sealed class Personagem
     public double AversaoAoFrio { get; set; }
     public double AversaoAFome { get; set; }
     public double AversaoAoSono { get; set; }
+    public Bicho? AlvoDeCaca { get; set; } // bicho reservado pra evitar que outro personagem persiga o mesmo (ver EstadoDoJogo.EscolherBichoAlvo)
+    public Posicao? AlvoDeColeta { get; set; } // posicao da celula de arvore (comum ou frutifera) reservada (ver EstadoDoJogo.EscolherArvoreAlvo)
+    public int? TurnoDoAlvoDeCaca { get; set; } // ultimo turno em que AlvoDeCaca foi confirmado -- reservas nao reconfirmadas expiram (ver EstadoDoJogo.PensarPersonagensAutonomos)
+    public int? TurnoDoAlvoDeColeta { get; set; } // ultimo turno em que AlvoDeColeta foi confirmado
 
     public Item? Capacete { get; set; }
     public Item? Peitoral { get; set; }

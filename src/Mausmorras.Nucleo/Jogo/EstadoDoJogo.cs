@@ -58,9 +58,14 @@ public sealed partial class EstadoDoJogo
     private const int TurnosParaCrescer = 400; // ~3.3 dias de jogo ate um filho virar adulto
     private const double ChanceDeNascimentoPorTurno = 0.05; // chance por turno quando as condicoes pra nascimento estao dadas
     private const double LimiarFomeParaBuscarComida = 0.35; // era 0.5 -- age mais cedo, sobra mais tempo de volta
-    private const int PopulacaoAlvoDeBichos = 12;
     private const int RaioDeAlcanceDoBicho = 7; // distancia maxima da borda do mapa
-    private const int TentativasDeNascimentoDeBichoPorDia = 3; // 1 por dia nao repunha rapido o bastante -- a populacao ia a zero em poucos dias de caca e nunca mais se recuperava, forcando cacadas cada vez mais longas ate a beira do mapa
+    // precisa cobrir o consumo diario do grupo inteiro (NumeroDeFundadores * FomePorTurno * turnos/dia),
+    // convertido em bichos via ValorDaCarne, senao a producao de comida fica estruturalmente abaixo da
+    // demanda nao importa quantos cacadores existam -- +1 de margem pra ineficiencia de viagem ate o bicho
+    private const int TentativasDeNascimentoDeBichoPorDia = (NumeroDeFundadores * FomePorTurno * TurnosPorMetadeDoDia * 2 + ValorDaCarne - 1) / ValorDaCarne + 1;
+    // headroom acima do necessario por dia, senao um dia de caca fraca faz o teto descartar os
+    // nascimentos do dia seguinte (TentarNascerBicho para de tentar quando _bichos.Count >= este valor)
+    private const int PopulacaoAlvoDeBichos = TentativasDeNascimentoDeBichoPorDia + 6;
     private const double MargemParaTrocarDeObjetivo = 0.15; // ver comentario em PensarPersonagensAutonomos -- evita trocar de objetivo por uma diferenca de severidade insignificante
     private const double SeveridadeMinimaParaInterromperPorFrio = 0.5; // frio so ignora o compromisso quando ja esta REALMENTE severo, nao so acima do limiar pessoal (que o trauma pode deixar bem baixo) -- senao alguem com muita aversao fica preso perto do fogo, nunca se afasta tempo suficiente pra caçar, e acaba morrendo de fome do lado da fogueira
     private const double LimiarVidaParaMedoDeMorrer = 0.3; // abaixo desse percentual de vida, o instinto de sobrevivencia ignora qualquer compromisso ou tarefa em andamento
@@ -141,15 +146,15 @@ public sealed partial class EstadoDoJogo
 
         // vida maxima nunca pode empatar entre dois fundadores: como a fome sobe igual pra todo
         // mundo, um empate faria os dois morrerem no mesmo turno, sem ninguem vivo pra
-        // TransferirControleAoMorrer passar o controle adiante
+        // TransferirControleAoMorrer passar o controle adiante. tentativa limitada (mesmo padrao de
+        // TentarNascerBicho): se NumeroDeFundadores algum dia superar a quantidade de valores
+        // distintos possiveis no intervalo, aceita um empate em vez de travar buscando o impossivel
         var vidasMaximasUsadas = new List<int>();
         for (var i = 0; i < NumeroDeFundadores; i++)
         {
-            int vidaMaxima;
-            do
-            {
+            var vidaMaxima = VidaMaximaAleatoria();
+            for (var tentativa = 0; tentativa < 20 && vidasMaximasUsadas.Contains(vidaMaxima); tentativa++)
                 vidaMaxima = VidaMaximaAleatoria();
-            } while (vidasMaximasUsadas.Contains(vidaMaxima));
             vidasMaximasUsadas.Add(vidaMaxima);
 
             _personagens.Add(new Personagem(new Posicao(spawn.X + i, spawn.Y), vidaMaxima) { Traco = TracoAleatorio() });
@@ -508,8 +513,12 @@ public sealed partial class EstadoDoJogo
                 // prioridade (como construir a segunda casa) -- madeira nunca sobra pra isso
                 var adultosNaVila = _personagens.Where(o => o.Vida > 0 && !o.EhCrianca && EstaNaVila(o)).ToList();
                 var numeroDeCacadoresAlvo = (int)Math.Ceiling(adultosNaVila.Count / (double)OcupantesPorCasa);
+                // com empate de fome (o estado DEFAULT logo apos a casa ficar pronta), Aventureira
+                // tem preferencia pro papel de cacador -- mas o desempate por indice continua por
+                // ultimo, senao dois Aventureira empatados voltariam a gerar ambiguidade
                 var maisFamintosDoGrupo = adultosNaVila
                     .OrderByDescending(o => o.Fome)
+                    .ThenByDescending(o => o.Traco == TracoDePersonalidade.Aventureira)
                     .ThenByDescending(o => _personagens.IndexOf(o))
                     .Take(numeroDeCacadoresAlvo)
                     .ToHashSet();
@@ -525,15 +534,44 @@ public sealed partial class EstadoDoJogo
                     ExpressarDesejo(p);
             }
         }
+
+        // reservas de alvo (AlvoDeCaca/AlvoDeColeta) so continuam validas se reconfirmadas NESTE turno --
+        // sem isso, alguem que abandona uma perseguicao no meio (deixou de ser o mais faminto do grupo,
+        // por exemplo) trava o alvo reservado pra sempre, tirando-o do alcance de qualquer outro cacador
+        // mesmo sem ninguem mais indo atras dele
+        foreach (var p in _personagens)
+        {
+            if (p.AlvoDeCaca is not null && p.TurnoDoAlvoDeCaca != _turno)
+                p.AlvoDeCaca = null;
+            if (p.AlvoDeColeta is not null && p.TurnoDoAlvoDeColeta != _turno)
+                p.AlvoDeColeta = null;
+        }
     }
 
-    private static readonly string[] DesejosOciosos = { "explorar", "conversar", "descansar" };
+    // pesos por traco -- Aventureira prefere explorar, Caseira prefere descansar, Equilibrada e uniforme.
+    // puramente cosmetico (mesmo espirito de DesejoAtual), so da mais cara pra personalidade sem
+    // interferir em nenhuma necessidade real
+    private static readonly Dictionary<TracoDePersonalidade, (string Desejo, int Peso)[]> PesosDeDesejo = new()
+    {
+        [TracoDePersonalidade.Aventureira] = new[] { ("explorar", 3), ("conversar", 1), ("descansar", 1) },
+        [TracoDePersonalidade.Caseira] = new[] { ("descansar", 3), ("conversar", 1), ("explorar", 1) },
+        [TracoDePersonalidade.Equilibrada] = new[] { ("explorar", 1), ("conversar", 1), ("descansar", 1) },
+    };
 
     // vontade puramente cosmetica, so preenche o tempo ocioso quando nao ha nada urgente nem
     // produtivo pra fazer -- nao muda posicao nem necessidades, so da uma fala e um rotulo
     private void ExpressarDesejo(Personagem p)
     {
-        var desejo = DesejosOciosos[_random.Next(DesejosOciosos.Length)];
+        var pesos = PesosDeDesejo[p.Traco];
+        var sorteio = _random.Next(pesos.Sum(x => x.Peso));
+        var acumulado = 0;
+        var desejo = pesos[^1].Desejo;
+        foreach (var (nome, peso) in pesos)
+        {
+            acumulado += peso;
+            if (sorteio < acumulado) { desejo = nome; break; }
+        }
+
         p.DesejoAtual = desejo;
         FalarSobre(p, $"desejo_{desejo}");
     }
@@ -652,7 +690,7 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        var passoAteBicho = Caminho.ProximoPasso(_mapaDaVila!, ajudante.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
+        var passoAteBicho = EscolherBichoAlvo(ajudante);
         if (passoAteBicho is { } destinoBicho)
             MoverPersonagemAutonomo(ajudante, destinoBicho);
     }
@@ -691,7 +729,7 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
+        var passo = EscolherBichoAlvo(p);
         if (passo is { } destino)
             MoverPersonagemAutonomo(p, destino);
     }
@@ -742,7 +780,7 @@ public sealed partial class EstadoDoJogo
                 return true;
             }
 
-            var passoParaArvore = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, EstaAdjacenteAArvore);
+            var passoParaArvore = EscolherArvoreAlvo(p, EhArvoreColhivel);
             if (passoParaArvore is { } destinoArvore)
             {
                 MoverPersonagemAutonomo(p, destinoArvore);
@@ -753,12 +791,83 @@ public sealed partial class EstadoDoJogo
         return false;
     }
 
+    // reserva o bicho perseguido pra evitar que dois famintos convirjam pro mesmo alvo -- sem limpeza
+    // externa: revalidada a cada chamada (bicho cacado/sumiu de _bichos? escolhe outro automaticamente)
+    private Posicao? EscolherBichoAlvo(Personagem p)
+    {
+        if (p.AlvoDeCaca is { } atual && _bichos.Contains(atual))
+        {
+            p.TurnoDoAlvoDeCaca = _turno;
+            return Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => pos == atual.Posicao);
+        }
+
+        var reservadosPorOutros = _personagens
+            .Where(o => !ReferenceEquals(o, p) && o.AlvoDeCaca is not null)
+            .Select(o => o.AlvoDeCaca!)
+            .ToHashSet();
+
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao,
+            pos => _bichos.Any(b => b.Posicao == pos && !reservadosPorOutros.Contains(b)), out var destino);
+
+        p.AlvoDeCaca = destino is { } d ? _bichos.FirstOrDefault(b => b.Posicao == d) : null;
+        if (p.AlvoDeCaca is not null)
+            p.TurnoDoAlvoDeCaca = _turno;
+        return passo;
+    }
+
+    // analogo pra arvore -- ehColhivel varia por chamador (madeira comum+frutifera vs so frutifera),
+    // entao fica parametrizado em vez de fixar um criterio so
+    private Posicao? EscolherArvoreAlvo(Personagem p, Func<Posicao, bool> ehColhivel)
+    {
+        if (p.AlvoDeColeta is { } atual && ehColhivel(atual))
+        {
+            p.TurnoDoAlvoDeColeta = _turno;
+            return Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => EstaAdjacente(pos, atual));
+        }
+
+        var reservadasPorOutros = _personagens
+            .Where(o => !ReferenceEquals(o, p) && o.AlvoDeColeta is not null)
+            .Select(o => o.AlvoDeColeta!.Value)
+            .ToHashSet();
+
+        // a arvore em si nunca e caminhavel (bloqueia passagem), entao o BFS so pode mirar numa
+        // celula ANDAVEL adjacente a ela -- o predicado busca essa vizinhanca, e o alvo reservado
+        // fica sendo a arvore encontrada, nao a celula andavel usada pra chegar la
+        Posicao? arvoreAlvo = null;
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos =>
+        {
+            foreach (var d in Direcoes)
+            {
+                var vizinho = pos + d;
+                if (!_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) || !ehColhivel(vizinho) || reservadasPorOutros.Contains(vizinho))
+                    continue;
+
+                arvoreAlvo = vizinho;
+                return true;
+            }
+
+            return false;
+        });
+
+        p.AlvoDeColeta = arvoreAlvo;
+        if (p.AlvoDeColeta is not null)
+            p.TurnoDoAlvoDeColeta = _turno;
+        return passo;
+    }
+
     private void TentarCacarPreventivamente(Personagem p)
     {
         // "previsao de futuro": nao basta cacar so pra si -- se ja tem comida de sobra (mais do
         // que o outro), vale mais repassar agora, enquanto o outro ainda nao esta com fome, do
-        // que so ir empilhando na propria mochila
-        var outro = _personagens.FirstOrDefault(o => !ReferenceEquals(o, p) && o.Vida > 0 && !o.EhCrianca && EstaNaVila(o));
+        // que so ir empilhando na propria mochila. quem recebe e sempre quem tem MENOS comida
+        // guardada no grupo inteiro, nao o primeiro adulto da lista -- com poucas pessoas isso
+        // raramente importava, mas com o grupo maior um criterio posicional sempre repassava pro
+        // mesmo indice baixo, deixando quem estava mais longe (indices altos) sem nunca receber nada
+        var outro = _personagens
+            .Where(o => !ReferenceEquals(o, p) && o.Vida > 0 && !o.EhCrianca && EstaNaVila(o))
+            .OrderBy(o => ContarComida(o))
+            .ThenByDescending(o => o.Fome)
+            .FirstOrDefault();
         if (outro is not null && ContarComida(p) >= EstoqueDeComidaParaCompartilhar && ContarComida(p) > ContarComida(outro))
         {
             if (EstaAdjacente(p.Posicao, outro.Posicao))
@@ -793,7 +902,7 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => _bichos.Any(b => b.Posicao == pos));
+        var passo = EscolherBichoAlvo(p);
         if (passo is { } destino)
             MoverPersonagemAutonomo(p, destino);
     }
@@ -870,7 +979,7 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, EstaAdjacenteAArvore);
+        var passo = EscolherArvoreAlvo(p, EhArvoreColhivel);
         if (passo is { } destino)
             MoverPersonagemAutonomo(p, destino);
     }
@@ -910,8 +1019,6 @@ public sealed partial class EstadoDoJogo
 
         return null;
     }
-
-    private bool EstaAdjacenteAArvore(Posicao pos) => ProcurarArvoreAdjacente(pos) is not null;
 
     private void ColherArvoreAutonomamente(Personagem p, Posicao arvore)
     {
