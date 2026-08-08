@@ -50,7 +50,7 @@ public sealed partial class EstadoDoJogo
     private const int AlivioDoSonoNoturno = 15; // dormir de noite e o que realmente recupera o sono
     private const int SonoMinimoAoDescansar = 30; // dormir a noite toda nao zera o sono de vez -- sobra um residuo, como cansaço real
     private const int EstoqueDeComidaParaCompartilhar = 2; // a partir de quantos itens de comida o cacador comeca a repassar pro outro
-    private const int NumeroDeFundadores = 5; // era 2 -- vila comeca maior
+    private const int NumeroDeFundadores = 8; // era 2 -- vila comeca maior
     private const int VidaMaximaMinimaFundador = 22; // era 18 -- mais margem de sobrevivencia
     private const int VidaMaximaMaximaFundador = 28; // era 22
     private const int VidaMaximaMinimaCrianca = 10; // criancas comecam mais frageis que os fundadores
