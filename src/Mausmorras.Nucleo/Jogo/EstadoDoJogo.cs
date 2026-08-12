@@ -228,6 +228,19 @@ public sealed partial class EstadoDoJogo
             : $"Depois disso, quem sobrou fica mais precavido com {nomeDaCausa}.");
     }
 
+    // experiencia propria: sobreviver a um perigo real tambem deixa marca, nao so testemunhar a
+    // morte de outro -- mesmo ajuste que RegistrarTraumaPorMorte aplica aos sobreviventes, mas
+    // disparado pela PROPRIA quase-morte da pessoa. atribuido com precisao a quem estava causando
+    // dano de verdade no momento (Fome/Temperatura/Sono no ponto exato onde AtualizarNecessidade/
+    // AtualizarTemperatura aplicam dano) -- nao a qualquer necessidade so um pouco elevada, que por
+    // essa altura ja teria cruzado o limiar "efetivo" de qualquer jeito e diluiria a atribuicao
+    private void RegistrarTraumaPorQuaseMorte(Personagem p)
+    {
+        if (p.Fome >= FomeMaxima) p.AversaoAFome++;
+        if (p.Temperatura <= TemperaturaCritica) p.AversaoAoFrio++;
+        if (p.Sono >= SonoMaximo) p.AversaoAoSono++;
+    }
+
     public bool SelecionarProximoPersonagem()
     {
         if (LocalAtual != TipoDeLocal.Vila)
@@ -412,7 +425,10 @@ public sealed partial class EstadoDoJogo
             // a fala so dispara na transicao (nao tinha medo -> tem medo), nao a cada turno
             var estaComMedo = (double)p.Vida / p.VidaMaxima <= LimiarVidaParaMedoDeMorrer;
             if (estaComMedo && !p.EstaComMedo)
+            {
                 FalarSobre(p, "medo");
+                RegistrarTraumaPorQuaseMorte(p);
+            }
             p.EstaComMedo = estaComMedo;
 
             // mesmo sem nenhuma necessidade critica ainda, comecar a voltar pro abrigo com
