@@ -10,6 +10,28 @@ public sealed partial class EstadoDoJogo
     private const int RaioDeVisao = 13;
     private const int MaximoDeMensagens = 200;
     private const int OuroPorPilha = 10;
+
+    // combate na masmorra
+    private const int DanoDoJogador = 5;
+    private const int VidaBaseDoMonstro = 10;
+    private const int IncrementoDeVidaPorAndar = 4;
+    private const int DanoBaseDoMonstro = 3;
+    private const int IncrementoDeDanoPorAndar = 1;
+    private const int OuroPorMonstro = 15; // acima de OuroPorPilha -- risco maior que so coletar
+    private const int NumeroBaseDeMonstros = 2;
+    private const int AndaresPorIncrementoDeMonstro = 2; // +1 monstro a cada 2 andares
+    private const int RaioDeDeteccaoDoMonstro = 6; // distancia manhattan pra comecar a perseguir
+    private const int IntervaloDeRegeneracao = 10; // cura 1 ponto a cada N turnos seguro -- 160 turnos (1 dia) pra sair de ~30% de vida ate o teto, bem mais lento que o dano ambiental (1/turno)
+
+    // expedicoes autonomas a masmorra + conversao de ouro
+    private const int CustoDeOuroPorConversao = OuroPorPilha;
+    private const int MadeiraPorConversaoDeOuro = MadeiraPorArvore;
+    private const int DuracaoMinimaDeExpedicao = 40; // meio TurnosPorMetadeDoDia
+    private const int DuracaoMaximaDeExpedicao = 120; // 1,5x TurnosPorMetadeDoDia
+    private const int MadeiraMinimaDeExpedicao = 15;
+    private const int MadeiraMaximaDeExpedicao = CustoDaCasa; // quase funda uma casa sozinha
+    private const double ChanceDeExpedicaoPerigosa = 0.2; // rolagem unica na volta, nao por turno
+    private const int DanoDeExpedicaoPerigosa = 8; // ~36% da VidaMaximaMinimaFundador
     private const int LarguraDaVila = 80;
     private const int AlturaDaVila = 50;
     private const int TurnosPorMetadeDoDia = 80;
@@ -113,6 +135,7 @@ public sealed partial class EstadoDoJogo
     private List<Personagem> _personagens = new();
     private int _indiceSelecionado;
     private List<Bicho> _bichos = new();
+    private List<Monstro> _monstros = new();
 
     public MapaDaMasmorra Mapa { get; private set; } = null!;
     public IReadOnlyList<Sala> Salas { get; private set; } = Array.Empty<Sala>();
@@ -120,9 +143,11 @@ public sealed partial class EstadoDoJogo
     public IReadOnlyList<Personagem> Personagens => _personagens;
     public int IndiceSelecionado => _indiceSelecionado;
     public int Madeira { get; private set; }
+    public int Ouro { get; private set; }
     public IEnumerable<Personagem> PersonagensNoLocalAtual =>
-        LocalAtual == TipoDeLocal.Vila ? _personagens : new[] { Personagem };
+        LocalAtual == TipoDeLocal.Vila ? _personagens.Where(EstaNaVila) : new[] { Personagem };
     public IReadOnlyList<Bicho> BichosNoLocalAtual => LocalAtual == TipoDeLocal.Vila ? _bichos : Array.Empty<Bicho>();
+    public IReadOnlyList<Monstro> MonstrosNoLocalAtual => LocalAtual == TipoDeLocal.Masmorra ? _monstros : Array.Empty<Monstro>();
     public int Andar { get; private set; } = 1;
     public TipoDeLocal LocalAtual => Andar == 0 ? TipoDeLocal.Vila : TipoDeLocal.Masmorra;
     public IReadOnlySet<Posicao> CelulasVisiveis { get; private set; } = new HashSet<Posicao>();
@@ -219,10 +244,11 @@ public sealed partial class EstadoDoJogo
                 case "frio": sobrevivente.AversaoAoFrio++; break;
                 case "fome": sobrevivente.AversaoAFome++; break;
                 case "sono": sobrevivente.AversaoAoSono++; break;
+                case "expedicao": sobrevivente.AversaoAExpedicao++; break;
             }
         }
 
-        var nomeDaCausa = causa switch { "frio" => "frio", "fome" => "fome", _ => "cansaço" };
+        var nomeDaCausa = causa switch { "frio" => "frio", "fome" => "fome", "expedicao" => "os perigos da masmorra", _ => "cansaço" };
         AdicionarMensagem(sobreviventes.Count > 1
             ? $"Depois disso, os sobreviventes ficam mais precavidos com {nomeDaCausa}."
             : $"Depois disso, quem sobrou fica mais precavido com {nomeDaCausa}.");
@@ -246,14 +272,14 @@ public sealed partial class EstadoDoJogo
         if (LocalAtual != TipoDeLocal.Vila)
             return false;
 
-        if (_personagens.Count(p => p.Vida > 0 && !p.EhCrianca) <= 1)
+        if (_personagens.Count(p => p.Vida > 0 && !p.EhCrianca && EstaNaVila(p)) <= 1)
             return false;
 
         var indice = _indiceSelecionado;
         do
         {
             indice = (indice + 1) % _personagens.Count;
-        } while (_personagens[indice].Vida <= 0 || _personagens[indice].EhCrianca);
+        } while (_personagens[indice].Vida <= 0 || _personagens[indice].EhCrianca || !EstaNaVila(_personagens[indice]));
 
         _indiceSelecionado = indice;
         AdicionarMensagem("Você assume o controle de outra pessoa.");
@@ -280,7 +306,9 @@ public sealed partial class EstadoDoJogo
             }
         }
 
+        TentarConverterOuroEmMadeiraSeNecessario();
         PensarPersonagensAutonomos();
+        ResolverExpedicoesAutonomas();
         TentarNascerCrianca();
         AtualizarCrescimento();
         // a caca precisa ser checada ANTES do bicho se mover: se checasse depois, um bicho que
@@ -288,12 +316,14 @@ public sealed partial class EstadoDoJogo
         // sorteado um passo pra longe antes da checagem rodar
         VerificarCacaEncontros();
         MoverBichos();
+        MoverMonstros();
         AtualizarNecessidade(p => p.Fome, (p, v) => p.Fome = v, FomeMaxima, FomePorTurno, DanoPorFomeMaxima, "está faminta", "morreu de fome", "fome");
         // criancas ficam de fora do rastreamento de sono (ver AtualizarNecessidade) -- elas nao tem
         // como chegar sozinhas na cama, entao contariam apenas como uma exaustao inevitavel
         AtualizarNecessidade(p => p.Sono, (p, v) => p.Sono = v, SonoMaximo, SonoPorTurno, DanoPorSonoMaximo, "está com sono", "morreu de exaustão", "sono", AlivioDoSono, SonoMinimoAoDescansar, ignorarCriancas: true);
         AtualizarTemperatura();
         AtualizarFogueiras();
+        AtualizarRegeneracao();
         TransferirControleAoMorrer();
         AtualizarVisibilidade();
     }
@@ -303,7 +333,7 @@ public sealed partial class EstadoDoJogo
         if (Personagem.Vida > 0)
             return;
 
-        var indiceVivo = _personagens.FindIndex(p => p.Vida > 0 && !p.EhCrianca);
+        var indiceVivo = _personagens.FindIndex(p => p.Vida > 0 && !p.EhCrianca && EstaNaVila(p));
         if (indiceVivo < 0)
             return; // ninguém vivo — fim de jogo fica pra outra fase
 
@@ -323,7 +353,7 @@ public sealed partial class EstadoDoJogo
         for (var i = 0; i < _personagens.Count; i++)
         {
             var p = _personagens[i];
-            if (p.Vida <= 0)
+            if (p.Vida <= 0 || p.EstaEmExpedicao)
                 continue;
 
             var ambiente = AmbienteEfetivo(p, ambienteBase);
@@ -376,8 +406,10 @@ public sealed partial class EstadoDoJogo
 
     // o selecionado so tem posicao valida no mapa da vila se estiver de fato la;
     // se estiver na masmorra (possivel entrar em Observador de la dentro), as coordenadas
-    // dele nao correspondem ao mapa da vila mesmo que numericamente coincidam com algo de la
-    private bool EstaNaVila(Personagem p) => !ReferenceEquals(p, Personagem) || LocalAtual == TipoDeLocal.Vila;
+    // dele nao correspondem ao mapa da vila mesmo que numericamente coincidam com algo de la.
+    // quem esta em expedicao autonoma tambem nao esta na vila, mesmo sem ser o selecionado
+    private bool EstaNaVila(Personagem p) =>
+        !p.EstaEmExpedicao && (!ReferenceEquals(p, Personagem) || LocalAtual == TipoDeLocal.Vila);
 
     // uma casa por casal (2 pessoas); sobrando alguem sozinho, ele tambem ganha a propria --
     // 4 pessoas = 2 casas, 5 = 3, 6 = 3, 7 = 4 ...
@@ -450,7 +482,7 @@ public sealed partial class EstadoDoJogo
             // morrer de fome tambem -- ninguem deveria morrer de fome sozinho tendo companhia por perto
             // com comida sobrando. sem isso, so seria atendida quando nenhum adulto tivesse mais nada a fazer
             var alguemPrecisandoDeComida = _personagens.FirstOrDefault(c =>
-                !ReferenceEquals(c, p) && c.Vida > 0 && (double)c.Fome / FomeMaxima >= LimiarFomeParaBuscarComida &&
+                !ReferenceEquals(c, p) && c.Vida > 0 && EstaNaVila(c) && (double)c.Fome / FomeMaxima >= LimiarFomeParaBuscarComida &&
                 (c.EhCrianca || (double)c.Vida / c.VidaMaxima <= LimiarVidaParaMedoDeMorrer));
             var severidadeDeQuemPrecisa = alguemPrecisandoDeComida is not null ? (double)alguemPrecisandoDeComida.Fome / FomeMaxima : 0.0;
 
@@ -540,12 +572,26 @@ public sealed partial class EstadoDoJogo
                     .ToHashSet();
                 var deveriaCacarPreventivamente = maisFamintosDoGrupo.Contains(p);
 
+                // com madeira baixa (e a conversao de ouro, tentada antes de PensarPersonagensAutonomos
+                // rodar, nao tendo dado conta sozinha), quem tiver MENOS aversao a expedicao se
+                // voluntaria -- nunca alguem ja com medo de morrer (vida critica nao deveria arriscar
+                // mais), e nunca duas pessoas em expedicao ao mesmo tempo
+                var candidatoAExpedicao = Madeira < CustoDaCasa && !_personagens.Any(o => o.EstaEmExpedicao)
+                    ? adultosNaVila.Except(maisFamintosDoGrupo)
+                        .Where(o => !o.EstaComMedo)
+                        .OrderBy(o => o.AversaoAExpedicao)
+                        .ThenByDescending(o => _personagens.IndexOf(o))
+                        .FirstOrDefault()
+                    : null;
+
                 if (deveriaCacarPreventivamente)
                     TentarCacarPreventivamente(p);
                 else if (NumeroDeCasasAlvo() > _numeroDeCasas)
                     TentarObterMadeira(p, CustoDaCasa, TentarConstruirAutonomamente);
                 else if (!EstaProtegidoDoFrio(p))
                     TentarObterMadeira(p, CustoDaFogueira, TentarConstruirFogueiraAutonomamente);
+                else if (ReferenceEquals(p, candidatoAExpedicao))
+                    IniciarExpedicaoAutonoma(p);
                 else if (_random.NextDouble() < ChanceDeDesejoOcioso)
                     ExpressarDesejo(p);
             }
@@ -610,7 +656,7 @@ public sealed partial class EstadoDoJogo
                 var a = adultos[i];
                 var b = adultos[j];
 
-                if (!EstaAdjacente(a.Posicao, b.Posicao) || !EstavelParaTerFilho(a) || !EstavelParaTerFilho(b))
+                if (!EstaAdjacente(a.Posicao, b.Posicao) || !EstaSeguro(a) || !EstaSeguro(b))
                     continue;
 
                 // a crianca nasce protegida do frio -- sem isso ela dependeria de alguem "carrega-la"
@@ -632,7 +678,9 @@ public sealed partial class EstadoDoJogo
         }
     }
 
-    private bool EstavelParaTerFilho(Personagem p)
+    // fome/sono/temperatura todos confortaveis -- usado tanto pra elegibilidade de nascimento de
+    // filho quanto pra regeneracao de vida (ver AtualizarRegeneracao)
+    private bool EstaSeguro(Personagem p)
     {
         var fomeSeveridade = (double)p.Fome / FomeMaxima;
         var sonoSeveridade = (double)p.Sono / SonoMaximo;
@@ -641,6 +689,22 @@ public sealed partial class EstadoDoJogo
         return fomeSeveridade < LimiarFomeParaBuscarComida
             && sonoSeveridade < LimiarSonoParaDormir
             && temperaturaSeveridade < LimiarTemperaturaParaBuscarAbrigo;
+    }
+
+    // gateado por EstaNaVila -- sem isso, o jogador poderia se afastar de um monstro na masmorra
+    // (fora do raio de deteccao) e regenerar de graca, sem gastar pocao, o que hoje nao existe
+    private void AtualizarRegeneracao()
+    {
+        if (_turno % IntervaloDeRegeneracao != 0)
+            return;
+
+        foreach (var p in _personagens)
+        {
+            if (p.Vida <= 0 || p.Vida >= p.VidaMaxima || !EstaNaVila(p) || !EstaSeguro(p))
+                continue;
+
+            p.Vida = Math.Min(p.VidaMaxima, p.Vida + 1);
+        }
     }
 
     private void AtualizarCrescimento()
@@ -827,8 +891,26 @@ public sealed partial class EstadoDoJogo
 
         p.AlvoDeCaca = destino is { } d ? _bichos.FirstOrDefault(b => b.Posicao == d) : null;
         if (p.AlvoDeCaca is not null)
+        {
             p.TurnoDoAlvoDeCaca = _turno;
-        return passo;
+            return passo;
+        }
+
+        // nenhum bicho livre em lugar nenhum do mapa -- em vez de ficar parado, tenta o ultimo
+        // lugar que ja deu certo (na esperanca de outro ter nascido perto), sem se afastar demais
+        if (p.LocalDeCacaConhecido is { } localConhecido)
+        {
+            if (DistanciaAte(p.Posicao, localConhecido) <= DistanciaMaximaEfetiva(p))
+            {
+                var passoConhecido = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => pos == localConhecido);
+                if (passoConhecido is not null)
+                    return passoConhecido;
+            }
+
+            p.LocalDeCacaConhecido = null; // memoria nao levou a lugar nenhum -- descarta em vez de tentar de novo todo turno
+        }
+
+        return null;
     }
 
     // analogo pra arvore -- ehColhivel varia por chamador (madeira comum+frutifera vs so frutifera),
@@ -867,8 +949,26 @@ public sealed partial class EstadoDoJogo
 
         p.AlvoDeColeta = arvoreAlvo;
         if (p.AlvoDeColeta is not null)
+        {
             p.TurnoDoAlvoDeColeta = _turno;
-        return passo;
+            return passo;
+        }
+
+        // nenhuma arvore livre em lugar nenhum do mapa -- tenta a ultima que ja deu certo, se ainda
+        // for colhivel (diferente do bicho, aqui da pra checar a validade exata antes de andar ate la)
+        if (p.LocalDeColetaConhecido is { } localConhecido)
+        {
+            if (ehColhivel(localConhecido) && DistanciaAte(p.Posicao, localConhecido) <= DistanciaMaximaEfetiva(p))
+            {
+                var passoConhecido = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos => EstaAdjacente(pos, localConhecido));
+                if (passoConhecido is not null)
+                    return passoConhecido;
+            }
+
+            p.LocalDeColetaConhecido = null; // memoria nao levou a lugar nenhum -- descarta em vez de tentar de novo todo turno
+        }
+
+        return null;
     }
 
     private void TentarCacarPreventivamente(Personagem p)
@@ -926,6 +1026,8 @@ public sealed partial class EstadoDoJogo
     private static int ContarComida(Personagem p) => p.Mochila.Count(it => it.Tipo == TipoDeItem.Comida);
 
     private static bool EstaAdjacente(Posicao a, Posicao b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y) <= 1;
+
+    private static int DistanciaAte(Posicao a, Posicao b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
 
     private void DarComida(Personagem doador, Personagem receptor)
     {
@@ -1038,6 +1140,8 @@ public sealed partial class EstadoDoJogo
 
     private void ColherArvoreAutonomamente(Personagem p, Posicao arvore)
     {
+        p.LocalDeColetaConhecido = arvore;
+
         if (_mapaDaVila![arvore.X, arvore.Y] == TipoDeCelula.ArvoreFrutifera)
         {
             Madeira += MadeiraPorArvoreFrutifera;
@@ -1131,6 +1235,40 @@ public sealed partial class EstadoDoJogo
     private int DistanciaDaBorda(Posicao p) =>
         Math.Min(Math.Min(p.X, _mapaDaVila!.Largura - 1 - p.X), Math.Min(p.Y, _mapaDaVila.Altura - 1 - p.Y));
 
+    // unica fonte de retaliacao do monstro (tanto perseguicao quanto o "revide" de quem sobreviveu
+    // a um ataque do jogador nesse mesmo turno, ja que continua adjacente) -- ver ResolverCombate
+    private void MoverMonstros()
+    {
+        if (LocalAtual != TipoDeLocal.Masmorra)
+            return;
+
+        foreach (var monstro in _monstros)
+        {
+            if (Morto)
+                break;
+
+            if (DistanciaAte(monstro.Posicao, Personagem.Posicao) > RaioDeDeteccaoDoMonstro)
+                continue;
+
+            var passo = Caminho.ProximoPasso(Mapa, monstro.Posicao, pos => pos == Personagem.Posicao);
+            if (passo is not { } destino)
+                continue;
+
+            if (destino == Personagem.Posicao)
+            {
+                var danoRecebido = Math.Max(1, monstro.Dano - Personagem.DefesaTotal);
+                Personagem.Vida = Math.Max(0, Personagem.Vida - danoRecebido);
+                AdicionarMensagem(Personagem.Vida > 0
+                    ? $"O monstro te alcança e causa {danoRecebido} de dano."
+                    : "O monstro te alcança e acaba com você.");
+            }
+            else
+            {
+                monstro.Posicao = destino;
+            }
+        }
+    }
+
     private void TentarNascerBicho()
     {
         if (_mapaDaVila is null || _bichos.Count >= PopulacaoAlvoDeBichos)
@@ -1161,10 +1299,63 @@ public sealed partial class EstadoDoJogo
             if (cacador is null)
                 continue;
 
+            cacador.LocalDeCacaConhecido = bicho.Posicao;
             _bichos.RemoveAt(i);
             cacador.Mochila.Add(new Item("Carne", TipoDeItem.Comida, ValorDaCarne));
             AdicionarMensagem($"{NomeDoAtor(cacador)} caça um animal e ganha carne.");
             FalarSobre(cacador, "caca");
+        }
+    }
+
+    // nivel de colonia, nao gasta o turno de ninguem -- roda ANTES da decisao de despachar
+    // expedicao, entao se a conversao sozinha ja resolve a escassez de madeira, ninguem precisa
+    // arriscar a viagem nesse turno
+    private void TentarConverterOuroEmMadeiraSeNecessario()
+    {
+        if (Madeira >= CustoDaCasa || Ouro < CustoDeOuroPorConversao)
+            return;
+
+        Ouro -= CustoDeOuroPorConversao;
+        Madeira += MadeiraPorConversaoDeOuro;
+        AdicionarMensagem($"A vila troca {CustoDeOuroPorConversao} de ouro por {MadeiraPorConversaoDeOuro} de madeira.");
+    }
+
+    private void IniciarExpedicaoAutonoma(Personagem p)
+    {
+        p.TurnoDeRetornoDaExpedicao = _turno + _random.Next(DuracaoMinimaDeExpedicao, DuracaoMaximaDeExpedicao + 1);
+        AdicionarMensagem($"{NomeDoAtor(p)} parte em uma expedição à masmorra em busca de recursos.");
+        FalarSobre(p, "expedicao");
+    }
+
+    // expedicao autonoma e abstraida (nao simula a masmorra celula-a-celula, so sorteia o
+    // resultado na volta) -- ver contexto no plano: o sistema de combate/movimento da masmorra e
+    // hardcoded no personagem controlado, reescrever isso pra suportar NPCs esta fora de proporcao
+    private void ResolverExpedicoesAutonomas()
+    {
+        foreach (var p in _personagens)
+        {
+            if (p.TurnoDeRetornoDaExpedicao is not { } turnoDeRetorno || _turno < turnoDeRetorno)
+                continue;
+
+            p.TurnoDeRetornoDaExpedicao = null;
+
+            if (_random.NextDouble() < ChanceDeExpedicaoPerigosa)
+            {
+                var vidaAntes = p.Vida;
+                p.Vida = Math.Max(0, p.Vida - DanoDeExpedicaoPerigosa);
+                if (vidaAntes > 0 && p.Vida == 0)
+                {
+                    AdicionarMensagem($"{NomeDoAtor(p)} não resiste aos perigos da masmorra e morre na expedição.");
+                    RegistrarTraumaPorMorte(p, "expedicao");
+                    continue;
+                }
+
+                AdicionarMensagem($"{NomeDoAtor(p)} volta ferido da expedição, mas traz recursos.");
+            }
+
+            var madeiraGanha = _random.Next(MadeiraMinimaDeExpedicao, MadeiraMaximaDeExpedicao + 1);
+            Madeira += madeiraGanha;
+            AdicionarMensagem($"{NomeDoAtor(p)} volta da masmorra com {madeiraGanha} de madeira.");
         }
     }
 
@@ -1181,7 +1372,7 @@ public sealed partial class EstadoDoJogo
         for (var i = 0; i < _personagens.Count; i++)
         {
             var p = _personagens[i];
-            if (p.Vida <= 0 || (ignorarCriancas && p.EhCrianca))
+            if (p.Vida <= 0 || (ignorarCriancas && p.EhCrianca) || p.EstaEmExpedicao)
                 continue;
 
             var valor = obter(p);
@@ -1293,6 +1484,7 @@ public sealed partial class EstadoDoJogo
         ["desejo_conversar"] = new[] { "Vem cá, deixa eu te contar uma coisa.", "Só queria bater um papo." },
         ["desejo_descansar"] = new[] { "Acho que vou só sentar um pouco.", "Não custa nada relaxar um instante." },
         ["medo"] = new[] { "Eu não quero morrer, preciso me cuidar.", "Isso está ficando perigoso demais pra mim." },
+        ["expedicao"] = new[] { "Vou até a masmorra buscar o que precisamos.", "Alguém tem que ir atrás de recursos lá embaixo." },
     };
 
     private void FalarSobre(Personagem p, string evento)

@@ -130,15 +130,10 @@ public sealed class VisaoDoMapa : View
             DesenharPreviaDeFogueira(mapa, camX, camY, viewport);
 
         foreach (var bicho in _estado.BichosNoLocalAtual)
-        {
-            var tx = bicho.Posicao.X - camX;
-            var ty = bicho.Posicao.Y - camY;
-            if (tx < 0 || tx >= viewport.Width || ty < 0 || ty >= viewport.Height)
-                continue;
+            DesenharEntidade(bicho.Posicao, camX, camY, viewport, Cores.Bicho, new Rune('a'));
 
-            SetAttribute(new Attribute(Cores.Bicho, Cores.Fundo));
-            AddRune(tx, ty, new Rune('a'));
-        }
+        foreach (var monstro in _estado.MonstrosNoLocalAtual)
+            DesenharEntidade(monstro.Posicao, camX, camY, viewport, Cores.Monstro, new Rune('m'));
 
         foreach (var p in _estado.PersonagensNoLocalAtual)
         {
@@ -157,6 +152,17 @@ public sealed class VisaoDoMapa : View
         }
 
         return true;
+    }
+
+    private void DesenharEntidade(Posicao pos, int camX, int camY, System.Drawing.Rectangle viewport, Color cor, Rune glifo)
+    {
+        var tx = pos.X - camX;
+        var ty = pos.Y - camY;
+        if (tx < 0 || tx >= viewport.Width || ty < 0 || ty >= viewport.Height)
+            return;
+
+        SetAttribute(new Attribute(cor, Cores.Fundo));
+        AddRune(tx, ty, glifo);
     }
 
     private void DesenharPreviaDeConstrucao(MapaDaMasmorra mapa, int camX, int camY, System.Drawing.Rectangle viewport)

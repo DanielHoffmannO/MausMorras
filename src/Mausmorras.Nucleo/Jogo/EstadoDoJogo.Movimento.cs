@@ -1,3 +1,4 @@
+using Mausmorras.Nucleo.Entidades;
 using Mausmorras.Nucleo.Itens;
 using Mausmorras.Nucleo.Mapa;
 
@@ -32,6 +33,14 @@ public sealed partial class EstadoDoJogo
             return true;
         }
 
+        var monstro = _monstros.FirstOrDefault(m => m.Posicao == alvo);
+        if (monstro is not null)
+        {
+            ResolverCombate(monstro);
+            AvancarTurno();
+            return true;
+        }
+
         if (!Mapa.EhCaminhavel(alvo))
             return false;
 
@@ -49,7 +58,7 @@ public sealed partial class EstadoDoJogo
 
             case TipoDeCelula.Ouro:
                 Mapa[alvo.X, alvo.Y] = TipoDeCelula.Chao;
-                Personagem.Ouro += OuroPorPilha;
+                Ouro += OuroPorPilha;
                 AdicionarMensagem($"Você encontra {OuroPorPilha} moedas de ouro.");
                 break;
 
@@ -100,5 +109,24 @@ public sealed partial class EstadoDoJogo
         _proximaColheitaDisponivel[posicao] = _turno + TurnosDeRegrowthDaFruta;
         AdicionarMensagem($"Você colhe frutas e ganha {MadeiraPorArvoreFrutifera} de madeira.");
         FalarSobre(Personagem, "fruta");
+    }
+
+    // cuida so do ataque do jogador (dano no monstro, morte/loot) -- a retaliacao do monstro (se
+    // sobreviver) acontece exclusivamente em MoverMonstros, chamado logo a seguir por AvancarTurno.
+    // manter as duas coisas separadas evita o monstro bater duas vezes no mesmo turno (uma aqui,
+    // outra em MoverMonstros, ja que ele continua adjacente depois do bump)
+    private void ResolverCombate(Monstro monstro)
+    {
+        monstro.Vida = Math.Max(0, monstro.Vida - DanoDoJogador);
+
+        if (monstro.Vida <= 0)
+        {
+            _monstros.Remove(monstro);
+            Ouro += OuroPorMonstro;
+            AdicionarMensagem($"Você derrota o monstro e ganha {OuroPorMonstro} moedas de ouro.");
+            return;
+        }
+
+        AdicionarMensagem($"Você ataca o monstro e causa {DanoDoJogador} de dano.");
     }
 }

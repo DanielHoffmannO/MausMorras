@@ -1,3 +1,4 @@
+using Mausmorras.Nucleo.Entidades;
 using Mausmorras.Nucleo.Geracao;
 using Mausmorras.Nucleo.Itens;
 using Mausmorras.Nucleo.Mapa;
@@ -11,7 +12,36 @@ public sealed partial class EstadoDoJogo
         var gerador = new GeradorDeMasmorra();
         var (mapa, salas, itens) = gerador.Gerar(_largura, _altura, _random);
         _itensNoChao = new Dictionary<Posicao, Item>(itens);
+        GerarMonstros(mapa, salas);
         return (mapa, salas);
+    }
+
+    // escala com Andar (nunca influenciado antes -- primeira fonte de dificuldade progressiva do
+    // jogo); pula Salas[0] (a sala onde o jogador surge) pra nao emboscar ninguem na entrada
+    private void GerarMonstros(MapaDaMasmorra mapa, IReadOnlyList<Sala> salas)
+    {
+        _monstros = new List<Monstro>();
+        if (salas.Count <= 1)
+            return;
+
+        var salasParaMonstros = salas.Skip(1).ToList();
+        var numeroDeMonstros = Math.Min(salasParaMonstros.Count, NumeroBaseDeMonstros + Andar / AndaresPorIncrementoDeMonstro);
+        var vidaMaxima = VidaBaseDoMonstro + Andar * IncrementoDeVidaPorAndar;
+        var dano = DanoBaseDoMonstro + Andar * IncrementoDeDanoPorAndar;
+
+        for (var i = 0; i < numeroDeMonstros; i++)
+        {
+            var sala = salasParaMonstros[_random.Next(salasParaMonstros.Count)];
+            for (var tentativa = 0; tentativa < 20; tentativa++)
+            {
+                var pos = new Posicao(_random.Next(sala.X + 1, sala.X + sala.Largura - 1), _random.Next(sala.Y + 1, sala.Y + sala.Altura - 1));
+                if (!mapa.EhCaminhavel(pos) || _monstros.Any(m => m.Posicao == pos))
+                    continue;
+
+                _monstros.Add(new Monstro(pos, vidaMaxima, dano));
+                break;
+            }
+        }
     }
 
     private Posicao PrepararVila()

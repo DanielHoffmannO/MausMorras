@@ -19,6 +19,7 @@ public sealed partial class EstadoDoJogo
             Turno = _turno,
             Modo = Modo,
             Madeira = Madeira,
+            Ouro = Ouro,
             Personagens = _personagens.Select(ParaSalvoPersonagem).ToList(),
             IndiceSelecionado = _indiceSelecionado,
             Celulas = new int[Mapa.Largura * Mapa.Altura],
@@ -28,6 +29,7 @@ public sealed partial class EstadoDoJogo
                 .Select(kv => new ItemNoChaoSalvo { X = kv.Key.X, Y = kv.Key.Y, Item = ParaSalvo(kv.Value) })
                 .ToList(),
             Bichos = _bichos.Select(b => new BichoSalvo { X = b.Posicao.X, Y = b.Posicao.Y }).ToList(),
+            Monstros = _monstros.Select(m => new MonstroSalvo { X = m.Posicao.X, Y = m.Posicao.Y, Vida = m.Vida, VidaMaxima = m.VidaMaxima, Dano = m.Dano }).ToList(),
             FogueirasAtivas = _fogueirasAtivas.Select(f => new FogueiraAtivaSalva { X = f.Posicao.X, Y = f.Posicao.Y, TurnoDeExpiracao = f.TurnoDeExpiracao }).ToList(),
             PrimeiroAbrigoConstruido = _primeiroAbrigoConstruido,
             NumeroDeCasas = _numeroDeCasas,
@@ -79,8 +81,7 @@ public sealed partial class EstadoDoJogo
             // save antigo (pre-multi-personagem): migra o unico personagem dos campos achatados legados
             var legado = new Personagem(new Posicao(dto.JogadorX, dto.JogadorY), dto.VidaMaximaJogador)
             {
-                Vida = dto.VidaJogador,
-                Ouro = dto.OuroJogador
+                Vida = dto.VidaJogador
             };
 
             legado.Mochila.AddRange(dto.Mochila.Select(DeSalvo));
@@ -100,17 +101,20 @@ public sealed partial class EstadoDoJogo
             _random = new Random(),
             _turno = dto.Turno,
             Modo = dto.Modo,
-            // ordem de fallback: estoque compartilhado novo -> formato antigo de personagem unico ->
-            // formato intermediario (madeira por personagem, ja removido de PersonagemSalvo mas ainda
-            // capturado via MadeiraLegado so pra nao perder o valor salvo de quem carregar esse save
-            Madeira = dto.Madeira != 0 ? dto.Madeira : dto.MadeiraJogador != 0 ? dto.MadeiraJogador : dto.Personagens.Sum(p => p.MadeiraLegado),
+            // ordem de fallback (mesma pra Madeira e Ouro, ambos ja foram por-personagem antes de
+            // virar estoque compartilhado): estoque novo -> formato antigo de personagem unico ->
+            // formato intermediario (por personagem, ja removido do DTO atual mas ainda capturado
+            // via campo legado so pra nao perder o valor salvo de quem carregar esse save)
+            Madeira = ResgatarEstoqueLegado(dto.Madeira, dto.MadeiraJogador, dto.Personagens.Select(p => p.MadeiraLegado)),
+            Ouro = ResgatarEstoqueLegado(dto.Ouro, dto.OuroJogador, dto.Personagens.Select(p => p.Ouro)),
             Mapa = mapa,
             Salas = Array.Empty<Sala>(),
             _personagens = personagens,
             _indiceSelecionado = indiceSelecionado,
             Andar = dto.Andar,
             _itensNoChao = dto.ItensNoChao.ToDictionary(i => new Posicao(i.X, i.Y), i => DeSalvo(i.Item)),
-            _bichos = dto.Bichos.Select(b => new Bicho(new Posicao(b.X, b.Y))).ToList()
+            _bichos = dto.Bichos.Select(b => new Bicho(new Posicao(b.X, b.Y))).ToList(),
+            _monstros = dto.Monstros.Select(m => new Monstro(new Posicao(m.X, m.Y), m.VidaMaxima, m.Dano) { Vida = m.Vida }).ToList()
         };
 
         if (dto.Andar == 0)
@@ -152,6 +156,10 @@ public sealed partial class EstadoDoJogo
         return estado;
     }
 
+    // estoque compartilhado -> formato antigo achatado -> soma por-personagem, nessa ordem de fallback
+    private static int ResgatarEstoqueLegado(int atual, int legadoAchatado, IEnumerable<int> legadoPorPersonagem) =>
+        atual != 0 ? atual : legadoAchatado != 0 ? legadoAchatado : legadoPorPersonagem.Sum();
+
     private static ItemSalvo ParaSalvo(Item item) => new() { Nome = item.Nome, Tipo = item.Tipo, Valor = item.Valor };
 
     private static Item DeSalvo(ItemSalvo salvo) => new(salvo.Nome, salvo.Tipo, salvo.Valor);
@@ -172,7 +180,6 @@ public sealed partial class EstadoDoJogo
         Y = p.Posicao.Y,
         Vida = p.Vida,
         VidaMaxima = p.VidaMaxima,
-        Ouro = p.Ouro,
         Fome = p.Fome,
         Temperatura = p.Temperatura,
         Sono = p.Sono,
@@ -182,6 +189,8 @@ public sealed partial class EstadoDoJogo
         AversaoAoFrio = p.AversaoAoFrio,
         AversaoAFome = p.AversaoAFome,
         AversaoAoSono = p.AversaoAoSono,
+        TurnoDeRetornoDaExpedicao = p.TurnoDeRetornoDaExpedicao,
+        AversaoAExpedicao = p.AversaoAExpedicao,
         Mochila = p.Mochila.Select(ParaSalvo).ToList(),
         Capacete = p.Capacete is { } c ? ParaSalvo(c) : null,
         Peitoral = p.Peitoral is { } pe ? ParaSalvo(pe) : null,
@@ -193,9 +202,10 @@ public sealed partial class EstadoDoJogo
     {
         var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima)
         {
-            Vida = s.Vida, Ouro = s.Ouro, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono,
+            Vida = s.Vida, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono,
             EhCrianca = s.EhCrianca, Idade = s.Idade,
-            Traco = (TracoDePersonalidade)s.Traco, AversaoAoFrio = s.AversaoAoFrio, AversaoAFome = s.AversaoAFome, AversaoAoSono = s.AversaoAoSono
+            Traco = (TracoDePersonalidade)s.Traco, AversaoAoFrio = s.AversaoAoFrio, AversaoAFome = s.AversaoAFome, AversaoAoSono = s.AversaoAoSono,
+            TurnoDeRetornoDaExpedicao = s.TurnoDeRetornoDaExpedicao, AversaoAExpedicao = s.AversaoAExpedicao
         };
         p.Mochila.AddRange(s.Mochila.Select(DeSalvo));
         if (s.Capacete is { } c) p.Capacete = DeSalvo(c);

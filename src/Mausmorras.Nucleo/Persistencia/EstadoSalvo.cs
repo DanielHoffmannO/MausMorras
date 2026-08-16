@@ -21,6 +21,7 @@ public sealed class EstadoSalvo
     public int MadeiraJogador { get; set; }
     public int Turno { get; set; }
     public int Madeira { get; set; }
+    public int Ouro { get; set; }
     public ModoDeJogo Modo { get; set; } = ModoDeJogo.Jogando;
     public List<PersonagemSalvo> Personagens { get; set; } = new();
     public int IndiceSelecionado { get; set; }
@@ -34,6 +35,7 @@ public sealed class EstadoSalvo
     public ItemSalvo? Botas { get; set; }
     public List<ItemNoChaoSalvo> ItensNoChao { get; set; } = new();
     public List<BichoSalvo> Bichos { get; set; } = new();
+    public List<MonstroSalvo> Monstros { get; set; } = new();
     public List<FogueiraAtivaSalva> FogueirasAtivas { get; set; } = new();
     public bool PrimeiroAbrigoConstruido { get; set; }
     public int NumeroDeCasas { get; set; }
@@ -47,7 +49,7 @@ public sealed class PersonagemSalvo
     public int Y { get; set; }
     public int Vida { get; set; }
     public int VidaMaxima { get; set; }
-    public int Ouro { get; set; }
+    public int Ouro { get; set; } // legado: ouro virou estoque compartilhado (EstadoSalvo.Ouro) -- so serve pra migracao de saves antigos, ver EstadoDoJogo.Persistencia.cs
     [JsonPropertyName("Madeira")]
     public int MadeiraLegado { get; set; } // saves do formato intermediario (madeira por personagem, antes dela virar estoque compartilhado) -- so serve pra migracao em EstadoDoJogo.Persistencia.cs, nao usado em mais nada
     public int Fome { get; set; }
@@ -59,6 +61,8 @@ public sealed class PersonagemSalvo
     public double AversaoAoFrio { get; set; }
     public double AversaoAFome { get; set; }
     public double AversaoAoSono { get; set; }
+    public int? TurnoDeRetornoDaExpedicao { get; set; }
+    public double AversaoAExpedicao { get; set; }
     public List<ItemSalvo> Mochila { get; set; } = new();
     public ItemSalvo? Capacete { get; set; }
     public ItemSalvo? Peitoral { get; set; }
@@ -70,6 +74,15 @@ public sealed class BichoSalvo
 {
     public int X { get; set; }
     public int Y { get; set; }
+}
+
+public sealed class MonstroSalvo
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int Vida { get; set; }
+    public int VidaMaxima { get; set; }
+    public int Dano { get; set; }
 }
 
 public sealed class FogueiraAtivaSalva

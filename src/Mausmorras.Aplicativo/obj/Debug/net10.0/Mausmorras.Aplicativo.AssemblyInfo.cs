@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Mausmorras.Aplicativo")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+75fda04f8e2ee2aaa68a02f78942abc0f82c8088")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b8394c1609a89806d54a97f70d90f7ef9c147856")]
 [assembly: System.Reflection.AssemblyProductAttribute("Mausmorras.Aplicativo")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Mausmorras.Aplicativo")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

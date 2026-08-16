@@ -8,7 +8,6 @@ public sealed class Personagem
     public Posicao Posicao { get; set; }
     public int VidaMaxima { get; }
     public int Vida { get; set; }
-    public int Ouro { get; set; }
     public int Fome { get; set; }
     public int Temperatura { get; set; } = 30; // graus; ver EstadoDoJogo.TemperaturaIdeal para o valor ideal
     public int Sono { get; set; }
@@ -25,6 +24,11 @@ public sealed class Personagem
     public Posicao? AlvoDeColeta { get; set; } // posicao da celula de arvore (comum ou frutifera) reservada (ver EstadoDoJogo.EscolherArvoreAlvo)
     public int? TurnoDoAlvoDeCaca { get; set; } // ultimo turno em que AlvoDeCaca foi confirmado -- reservas nao reconfirmadas expiram (ver EstadoDoJogo.PensarPersonagensAutonomos)
     public int? TurnoDoAlvoDeColeta { get; set; } // ultimo turno em que AlvoDeColeta foi confirmado
+    public Posicao? LocalDeCacaConhecido { get; set; } // posicao do ultimo sucesso de caca, nao o alvo atual -- usado como ultimo recurso quando a busca normal nao acha nada (ver EstadoDoJogo.EscolherBichoAlvo)
+    public Posicao? LocalDeColetaConhecido { get; set; } // idem, pro ultimo sucesso de coleta de madeira/fruta
+    public int? TurnoDeRetornoDaExpedicao { get; set; } // null = nao esta em expedicao autonoma a masmorra (ver EstadoDoJogo.IniciarExpedicaoAutonoma)
+    public bool EstaEmExpedicao => TurnoDeRetornoDaExpedicao is not null;
+    public double AversaoAExpedicao { get; set; } // aumenta se morre numa expedicao -- deixa o grupo mais relutante a mandar gente de novo
 
     public Item? Capacete { get; set; }
     public Item? Peitoral { get; set; }
@@ -40,7 +44,6 @@ public sealed class Personagem
         Posicao = posicaoInicial;
         VidaMaxima = vidaMaxima;
         Vida = vidaMaxima;
-        Ouro = 0;
     }
 
     public Item? ObterEquipado(TipoDeItem tipo) => tipo switch

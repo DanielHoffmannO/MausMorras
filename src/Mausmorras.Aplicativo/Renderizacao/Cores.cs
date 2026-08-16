@@ -36,4 +36,5 @@ internal static class Cores
     public static readonly Color Cama = new("#6a5a7a");
     public static readonly Color Bau = new("#7a5a2a");
     public static readonly Color Crianca = new("#e0c88a");
+    public static readonly Color Monstro = new("#a8333a");
 }
