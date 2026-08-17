@@ -373,9 +373,13 @@ public sealed partial class EstadoDoJogo
         }
     }
 
+    // qual mapa vale pra esse personagem -- o selecionado pode estar num mapa diferente da vila
+    // (masmorra), todo mundo mais sempre esta no mapa da vila
+    private MapaDaMasmorra? MapaRelevantePara(Personagem p) => ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
+
     private int AmbienteEfetivo(Personagem p, int ambienteBase)
     {
-        var mapaRelevante = ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
+        var mapaRelevante = MapaRelevantePara(p);
         if (mapaRelevante is null)
             return ambienteBase;
 
@@ -444,9 +448,7 @@ public sealed partial class EstadoDoJogo
             if (ehControlado || !EstaNaVila(p))
                 continue;
 
-            var fomeSeveridade = (double)p.Fome / FomeMaxima;
-            var sonoSeveridade = (double)p.Sono / SonoMaximo;
-            var temperaturaSeveridade = Math.Clamp((double)(TemperaturaIdeal - p.Temperatura) / (TemperaturaIdeal - TemperaturaCritica), 0, 1);
+            var (fomeSeveridade, sonoSeveridade, temperaturaSeveridade) = SeveridadesDe(p);
 
             var fomeUrgente = fomeSeveridade >= LimiarFomeEfetivo(p);
             var frioUrgente = temperaturaSeveridade >= LimiarFrioEfetivo(p);
@@ -678,13 +680,16 @@ public sealed partial class EstadoDoJogo
         }
     }
 
+    private (double Fome, double Sono, double Temperatura) SeveridadesDe(Personagem p) => (
+        (double)p.Fome / FomeMaxima,
+        (double)p.Sono / SonoMaximo,
+        Math.Clamp((double)(TemperaturaIdeal - p.Temperatura) / (TemperaturaIdeal - TemperaturaCritica), 0, 1));
+
     // fome/sono/temperatura todos confortaveis -- usado tanto pra elegibilidade de nascimento de
     // filho quanto pra regeneracao de vida (ver AtualizarRegeneracao)
     private bool EstaSeguro(Personagem p)
     {
-        var fomeSeveridade = (double)p.Fome / FomeMaxima;
-        var sonoSeveridade = (double)p.Sono / SonoMaximo;
-        var temperaturaSeveridade = Math.Clamp((double)(TemperaturaIdeal - p.Temperatura) / (TemperaturaIdeal - TemperaturaCritica), 0, 1);
+        var (fomeSeveridade, sonoSeveridade, temperaturaSeveridade) = SeveridadesDe(p);
 
         return fomeSeveridade < LimiarFomeParaBuscarComida
             && sonoSeveridade < LimiarSonoParaDormir
@@ -752,27 +757,7 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(ajudante.Posicao);
-        if (arvoreFrutiferaAdjacente is { } arvoreFruta)
-        {
-            ColherArvoreAutonomamente(ajudante, arvoreFruta);
-            return;
-        }
-
-        if (TentarProtegerDoFrioDuranteExpedicao(ajudante))
-            return;
-
-        // uma cacada nao pode arrastar a pessoa pra tao longe de casa que a volta antes da noite
-        // vire inviavel -- melhor abandonar a comida da vez do que apostar a propria sobrevivencia
-        if (DistanteDemaisDaCasa(ajudante))
-        {
-            TentarBuscarAbrigo(ajudante);
-            return;
-        }
-
-        var passoAteBicho = EscolherBichoAlvo(ajudante);
-        if (passoAteBicho is { } destinoBicho)
-            MoverPersonagemAutonomo(ajudante, destinoBicho);
+        TentarForragearOuCacar(ajudante);
     }
 
     private void TentarResolverFome(Personagem p)
@@ -785,8 +770,18 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        // uma arvore frutifera bem do lado e uma fonte de comida mais segura que perseguir um bicho --
-        // nao desvia o caminho pra ela, so aproveita se ja estiver por perto nesse exato momento
+        TentarForragearOuCacar(p);
+    }
+
+    // cauda comum de qualquer busca autonoma de comida (sozinho, ajudando outro, ou cacando
+    // preventivamente): uma arvore frutifera bem do lado e mais segura que perseguir um bicho, entao
+    // nao desvia o caminho pra ela, so aproveita se ja estiver por perto nesse exato momento. depois,
+    // protecao contra frio tem prioridade (uma cacada pode levar pra longe de abrigo por muitos
+    // turnos, e a temperatura despenca rapido demais pra reagir do zero). por fim, uma cacada nao
+    // pode arrastar a pessoa pra tao longe de casa que a volta antes da noite vire inviavel --
+    // melhor abandonar a comida da vez do que apostar a propria sobrevivencia
+    private void TentarForragearOuCacar(Personagem p)
+    {
         var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(p.Posicao);
         if (arvoreFrutiferaAdjacente is { } arvoreFruta)
         {
@@ -794,15 +789,9 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        // uma cacada pode levar pra bem longe de qualquer abrigo por muitos turnos seguidos, e a
-        // temperatura despenca rapido demais (18 graus a 2/turno = so uns 9 turnos de folga) pra dar
-        // tempo de reagir do zero -- se ja esta esfriando e desprotegido, desvia pra arvore mais
-        // proxima e depois acende a fogueira ali mesmo, sem esperar a fome ceder prioridade pro frio
         if (TentarProtegerDoFrioDuranteExpedicao(p))
             return;
 
-        // uma cacada nao pode arrastar a pessoa pra tao longe de casa que a volta antes da noite
-        // vire inviavel -- melhor abandonar a comida da vez do que apostar a propria sobrevivencia
         if (DistanteDemaisDaCasa(p))
         {
             TentarBuscarAbrigo(p);
@@ -832,7 +821,7 @@ public sealed partial class EstadoDoJogo
                 if (_mapaDaVila[x, y] is not (TipoDeCelula.PisoDaCasa or TipoDeCelula.Cama or TipoDeCelula.Bau))
                     continue;
 
-                var distancia = Math.Abs(p.Posicao.X - x) + Math.Abs(p.Posicao.Y - y);
+                var distancia = DistanciaAte(p.Posicao, new Posicao(x, y));
                 if (distancia < distanciaMinima)
                     distanciaMinima = distancia;
             }
@@ -1000,27 +989,7 @@ public sealed partial class EstadoDoJogo
             }
         }
 
-        var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(p.Posicao);
-        if (arvoreFrutiferaAdjacente is { } arvoreFruta)
-        {
-            ColherArvoreAutonomamente(p, arvoreFruta);
-            return;
-        }
-
-        if (TentarProtegerDoFrioDuranteExpedicao(p))
-            return;
-
-        // uma cacada nao pode arrastar a pessoa pra tao longe de casa que a volta antes da noite
-        // vire inviavel -- melhor abandonar a comida da vez do que apostar a propria sobrevivencia
-        if (DistanteDemaisDaCasa(p))
-        {
-            TentarBuscarAbrigo(p);
-            return;
-        }
-
-        var passo = EscolherBichoAlvo(p);
-        if (passo is { } destino)
-            MoverPersonagemAutonomo(p, destino);
+        TentarForragearOuCacar(p);
     }
 
     private static int ContarComida(Personagem p) => p.Mochila.Count(it => it.Tipo == TipoDeItem.Comida);
@@ -1065,15 +1034,10 @@ public sealed partial class EstadoDoJogo
             MoverPersonagemAutonomo(p, destino);
     }
 
-    private bool EstaProtegidoDoFrio(Personagem p)
-    {
-        var mapaRelevante = ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
-        if (mapaRelevante is null)
-            return false;
-
-        return EstaPertoDeFogueira(mapaRelevante, p.Posicao) ||
-            mapaRelevante[p.Posicao.X, p.Posicao.Y] is TipoDeCelula.PisoDaCasa or TipoDeCelula.Cama or TipoDeCelula.Bau;
-    }
+    // mesma condicao que AmbienteEfetivo usa pra decidir "perto de fogueira ou em casa" -- em vez
+    // de duplicar a checagem, usa uma sentinela que nenhuma temperatura ambiente real assume: se
+    // AmbienteEfetivo devolveu algo diferente da sentinela, foi porque uma das duas condicoes bateu
+    private bool EstaProtegidoDoFrio(Personagem p) => AmbienteEfetivo(p, int.MinValue) != int.MinValue;
 
     private void TentarDormir(Personagem p)
     {
@@ -1102,12 +1066,17 @@ public sealed partial class EstadoDoJogo
             MoverPersonagemAutonomo(p, destino);
     }
 
-    private Posicao? ProcurarArvoreAdjacente(Posicao pos)
+    private Posicao? ProcurarArvoreAdjacente(Posicao pos) => ProcurarArvoreQueSatisfaz(pos, EhArvoreColhivel);
+
+    private Posicao? ProcurarArvoreFrutiferaAdjacente(Posicao pos) =>
+        ProcurarArvoreQueSatisfaz(pos, v => _mapaDaVila![v.X, v.Y] == TipoDeCelula.ArvoreFrutifera && PodeColherFruta(v));
+
+    private Posicao? ProcurarArvoreQueSatisfaz(Posicao pos, Func<Posicao, bool> predicado)
     {
         foreach (var d in Direcoes)
         {
             var vizinho = pos + d;
-            if (_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) && EhArvoreColhivel(vizinho))
+            if (_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) && predicado(vizinho))
                 return vizinho;
         }
 
@@ -1125,18 +1094,6 @@ public sealed partial class EstadoDoJogo
 
     private bool PodeColherFruta(Posicao posicao) =>
         !_proximaColheitaDisponivel.TryGetValue(posicao, out var turnoDisponivel) || _turno >= turnoDisponivel;
-
-    private Posicao? ProcurarArvoreFrutiferaAdjacente(Posicao pos)
-    {
-        foreach (var d in Direcoes)
-        {
-            var vizinho = pos + d;
-            if (_mapaDaVila!.DentroDosLimites(vizinho.X, vizinho.Y) && _mapaDaVila[vizinho.X, vizinho.Y] == TipoDeCelula.ArvoreFrutifera && PodeColherFruta(vizinho))
-                return vizinho;
-        }
-
-        return null;
-    }
 
     private void ColherArvoreAutonomamente(Personagem p, Posicao arvore)
     {
@@ -1363,7 +1320,7 @@ public sealed partial class EstadoDoJogo
 
     private bool EstaDescansando(Personagem p)
     {
-        var mapaRelevante = ReferenceEquals(p, Personagem) ? Mapa : _mapaDaVila;
+        var mapaRelevante = MapaRelevantePara(p);
         return mapaRelevante is not null && mapaRelevante[p.Posicao.X, p.Posicao.Y] == TipoDeCelula.Cama;
     }
 
