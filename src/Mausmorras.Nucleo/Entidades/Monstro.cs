@@ -8,12 +8,14 @@ public sealed class Monstro
     public int Vida { get; set; }
     public int VidaMaxima { get; }
     public int Dano { get; }
+    public TipoDeMonstro Tipo { get; }
 
-    public Monstro(Posicao posicaoInicial, int vidaMaxima, int dano)
+    public Monstro(Posicao posicaoInicial, int vidaMaxima, int dano, TipoDeMonstro tipo = TipoDeMonstro.Comum)
     {
         Posicao = posicaoInicial;
         VidaMaxima = vidaMaxima;
         Vida = vidaMaxima;
         Dano = dano;
+        Tipo = tipo;
     }
 }

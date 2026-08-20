@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using Mausmorras.Nucleo.Entidades;
 using Mausmorras.Nucleo.Jogo;
 using Mausmorras.Nucleo.Mapa;
 
@@ -11,11 +13,15 @@ public sealed class VisaoDoMapa : View
     private static readonly TimeSpan IntervaloTempoReal = TimeSpan.FromMilliseconds(400);
 
     private readonly string _caminhoDoSave;
+    private readonly int _larguraDoMundo;
+    private readonly int _alturaDoMundo;
     private EstadoDoJogo _estado;
     private bool _previaAtiva;
     private DateTime _ultimoCliqueDoC;
     private bool _previaFogueiraAtiva;
     private DateTime _ultimoCliqueDoF;
+    private bool _previaPlantioAtiva;
+    private DateTime _ultimoCliqueDoP;
     private object? _timeoutTempoReal;
 
     private readonly Dictionary<KeyCode, Func<bool>> _acoesPorTecla;
@@ -27,10 +33,12 @@ public sealed class VisaoDoMapa : View
 
     public EstadoDoJogo Estado => _estado;
 
-    public VisaoDoMapa(EstadoDoJogo estado, string caminhoDoSave)
+    public VisaoDoMapa(EstadoDoJogo estado, string caminhoDoSave, int larguraDoMundo, int alturaDoMundo)
     {
         _estado = estado;
         _caminhoDoSave = caminhoDoSave;
+        _larguraDoMundo = larguraDoMundo;
+        _alturaDoMundo = alturaDoMundo;
         CanFocus = true;
         Width = Dim.Fill();
         Height = Dim.Fill();
@@ -54,6 +62,8 @@ public sealed class VisaoDoMapa : View
             ['m'] = AlternarMiniMapa,
             ['c'] = AlternarOuConstruir,
             ['f'] = AlternarOuConstruirFogueira,
+            ['p'] = AlternarOuPlantar,
+            ['r'] = Reiniciar,
             ['w'] = () => _estado.TentarMoverPersonagem(Direcao.Norte),
             ['s'] = () => _estado.TentarMoverPersonagem(Direcao.Sul),
             ['a'] = () => _estado.TentarMoverPersonagem(Direcao.Oeste),
@@ -82,12 +92,20 @@ public sealed class VisaoDoMapa : View
         [TipoDeCelula.PisoDaCasa] = (new Rune('.'), Cores.Casa),
         [TipoDeCelula.Fogueira] = (new Rune('^'), Cores.Fogueira),
         [TipoDeCelula.ArvoreFrutifera] = (new Rune('♣'), Cores.ArvoreFrutifera),
+        [TipoDeCelula.Plantacao] = (new Rune('✿'), Cores.Plantacao),
         [TipoDeCelula.Cama] = (new Rune('z'), Cores.Cama),
         [TipoDeCelula.Bau] = (new Rune('b'), Cores.Bau),
     };
 
     private static (Rune Glifo, Color CorFrente) ObterVisualDaCelula(TipoDeCelula celula) =>
         VisualPorCelula.TryGetValue(celula, out var visual) ? visual : (new Rune('?'), Cores.Perigo);
+
+    private static Color CorDoMonstro(TipoDeMonstro tipo) => tipo switch
+    {
+        TipoDeMonstro.Resistente => Cores.MonstroResistente,
+        TipoDeMonstro.Feroz => Cores.MonstroFeroz,
+        _ => Cores.Monstro
+    };
 
     protected override bool OnDrawingContent(DrawContext context)
     {
@@ -129,11 +147,14 @@ public sealed class VisaoDoMapa : View
         if (_estado.LocalAtual == TipoDeLocal.Vila && _previaFogueiraAtiva)
             DesenharPreviaDeFogueira(mapa, camX, camY, viewport);
 
+        if (_estado.LocalAtual == TipoDeLocal.Vila && _previaPlantioAtiva)
+            DesenharPreviaDePlantio(mapa, camX, camY, viewport);
+
         foreach (var bicho in _estado.BichosNoLocalAtual)
             DesenharEntidade(bicho.Posicao, camX, camY, viewport, Cores.Bicho, new Rune('a'));
 
         foreach (var monstro in _estado.MonstrosNoLocalAtual)
-            DesenharEntidade(monstro.Posicao, camX, camY, viewport, Cores.Monstro, new Rune('m'));
+            DesenharEntidade(monstro.Posicao, camX, camY, viewport, CorDoMonstro(monstro.Tipo), new Rune('m'));
 
         foreach (var p in _estado.PersonagensNoLocalAtual)
         {
@@ -184,6 +205,13 @@ public sealed class VisaoDoMapa : View
         DesenharCelulaComPrevia(mapa, posicao.X, posicao.Y, camX, camY, viewport, corFundoPrevia);
     }
 
+    private void DesenharPreviaDePlantio(MapaDaMasmorra mapa, int camX, int camY, System.Drawing.Rectangle viewport)
+    {
+        var (posicao, valida) = _estado.ObterPreviaDePlantio();
+        var corFundoPrevia = valida ? Cores.PreviaValida : Cores.PreviaInvalida;
+        DesenharCelulaComPrevia(mapa, posicao.X, posicao.Y, camX, camY, viewport, corFundoPrevia);
+    }
+
     private void DesenharCelulaComPrevia(MapaDaMasmorra mapa, int x, int y, int camX, int camY, System.Drawing.Rectangle viewport, Color corFundoPrevia)
     {
         var telaX = x - camX;
@@ -222,14 +250,39 @@ public sealed class VisaoDoMapa : View
 
     private bool Sair()
     {
-        Application.RequestStop();
+        var opcao = MessageBox.Query(Application.Instance, "Sair", "Sair do jogo?", "Sair sem salvar", "Salvar e sair", "Cancelar");
+        switch (opcao)
+        {
+            case 0:
+                Application.RequestStop();
+                break;
+            case 1:
+                if (TentarSalvar())
+                    Application.RequestStop();
+                break;
+        }
+
         return false;
     }
 
     private bool Salvar()
     {
-        _estado.Salvar(_caminhoDoSave);
+        TentarSalvar();
         return true;
+    }
+
+    private bool TentarSalvar()
+    {
+        try
+        {
+            _estado.Salvar(_caminhoDoSave);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            MessageBox.ErrorQuery(Application.Instance, "Erro ao salvar", ex.Message, "OK");
+            return false;
+        }
     }
 
     private bool Carregar()
@@ -237,7 +290,41 @@ public sealed class VisaoDoMapa : View
         if (!File.Exists(_caminhoDoSave))
             return false;
 
-        _estado = EstadoDoJogo.CarregarDe(_caminhoDoSave);
+        var opcao = MessageBox.Query(Application.Instance, "Carregar", "Isso substitui o progresso atual pelo último save. Continuar?", "Carregar", "Cancelar");
+        return opcao == 0 && CarregarSemConfirmar();
+    }
+
+    // so faz sentido depois da extincao da vila (JogoEncerrado/SoRestamCriancas) -- durante o jogo
+    // normal, Morto so fica verdadeiro por uma fracao de turno (o controle e transferido no mesmo
+    // AvancarTurno), entao a tecla fica inerte sem incomodar o jogador
+    private bool Reiniciar()
+    {
+        if (!_estado.JogoEncerrado && !_estado.SoRestamCriancas)
+            return false;
+
+        var opcao = MessageBox.Query(Application.Instance, "Novo jogo", "Começar um novo jogo? O progresso desta vila será perdido.", "Novo jogo", "Cancelar");
+        if (opcao != 0)
+            return false;
+
+        _estado = new EstadoDoJogo(_larguraDoMundo, _alturaDoMundo);
+        PararTempoReal();
+        return true;
+    }
+
+    // usado tambem no boot (Programa.cs), onde nao ha "progresso atual" a proteger --
+    // por isso fica publico e sem o dialogo de confirmacao que Carregar() mostra pro F9
+    public bool CarregarSemConfirmar()
+    {
+        try
+        {
+            _estado = EstadoDoJogo.CarregarDe(_caminhoDoSave);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        {
+            MessageBox.ErrorQuery(Application.Instance, "Erro ao carregar", ex.Message, "OK");
+            return false;
+        }
+
         if (_estado.Modo == ModoDeJogo.Observador) IniciarTempoReal(); else PararTempoReal();
         return true;
     }
@@ -305,6 +392,7 @@ public sealed class VisaoDoMapa : View
         {
             _previaAtiva = true;
             _previaFogueiraAtiva = false;
+            _previaPlantioAtiva = false;
         }
 
         _ultimoCliqueDoC = agora;
@@ -332,9 +420,38 @@ public sealed class VisaoDoMapa : View
         {
             _previaFogueiraAtiva = true;
             _previaAtiva = false;
+            _previaPlantioAtiva = false;
         }
 
         _ultimoCliqueDoF = agora;
+        return true;
+    }
+
+    private bool AlternarOuPlantar()
+    {
+        if (_estado.Modo != ModoDeJogo.Jogando)
+            return false;
+
+        var agora = DateTime.UtcNow;
+        var cliqueDuplo = _previaPlantioAtiva && agora - _ultimoCliqueDoP <= JanelaDeCliqueDuplo;
+
+        if (cliqueDuplo)
+        {
+            _previaPlantioAtiva = false;
+        }
+        else if (_previaPlantioAtiva)
+        {
+            _estado.TentarPlantar();
+            _previaPlantioAtiva = false;
+        }
+        else
+        {
+            _previaPlantioAtiva = true;
+            _previaAtiva = false;
+            _previaFogueiraAtiva = false;
+        }
+
+        _ultimoCliqueDoP = agora;
         return true;
     }
 }

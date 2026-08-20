@@ -10,17 +10,26 @@ public sealed class GeradorDeMasmorra
         TipoDeCelula.Grama, TipoDeCelula.Agua, TipoDeCelula.Entulho, TipoDeCelula.Terra
     };
 
-    private static readonly Func<Item>[] CatalogoDeItens =
+    // Tier sobe com o andar (ver EscolherTier) -- assim o loot acompanha a dificuldade dos monstros
+    // em vez de ficar identico do andar 1 ao 20
+    private static readonly (Func<Item> Criar, int Tier)[] CatalogoDeItens =
     {
-        () => new Item("Capacete de Couro", TipoDeItem.Capacete, 2),
-        () => new Item("Elmo de Ferro", TipoDeItem.Capacete, 4),
-        () => new Item("Peitoral de Couro", TipoDeItem.Peitoral, 3),
-        () => new Item("Armadura de Ferro", TipoDeItem.Peitoral, 6),
-        () => new Item("Calça de Couro", TipoDeItem.Pernas, 2),
-        () => new Item("Grevas de Ferro", TipoDeItem.Pernas, 4),
-        () => new Item("Botas de Couro", TipoDeItem.Botas, 1),
-        () => new Item("Botas de Ferro", TipoDeItem.Botas, 3),
-        () => new Item("Poção de Vida", TipoDeItem.Generico, 10)
+        (() => new Item("Capacete de Couro", TipoDeItem.Capacete, 2), 1),
+        (() => new Item("Elmo de Ferro", TipoDeItem.Capacete, 4), 2),
+        (() => new Item("Elmo Élfico", TipoDeItem.Capacete, 7), 3),
+        (() => new Item("Peitoral de Couro", TipoDeItem.Peitoral, 3), 1),
+        (() => new Item("Armadura de Ferro", TipoDeItem.Peitoral, 6), 2),
+        (() => new Item("Armadura Élfica", TipoDeItem.Peitoral, 10), 3),
+        (() => new Item("Calça de Couro", TipoDeItem.Pernas, 2), 1),
+        (() => new Item("Grevas de Ferro", TipoDeItem.Pernas, 4), 2),
+        (() => new Item("Grevas Élficas", TipoDeItem.Pernas, 7), 3),
+        (() => new Item("Botas de Couro", TipoDeItem.Botas, 1), 1),
+        (() => new Item("Botas de Ferro", TipoDeItem.Botas, 3), 2),
+        (() => new Item("Botas Élficas", TipoDeItem.Botas, 5), 3),
+        (() => new Item("Adaga Enferrujada", TipoDeItem.Arma, 2), 1),
+        (() => new Item("Espada de Ferro", TipoDeItem.Arma, 4), 2),
+        (() => new Item("Espada Élfica", TipoDeItem.Arma, 7), 3),
+        (() => new Item("Poção de Vida", TipoDeItem.Generico, 10), 1)
     };
 
     private readonly int _maxSalas;
@@ -36,7 +45,7 @@ public sealed class GeradorDeMasmorra
         _larguraCorredor = larguraCorredor;
     }
 
-    public (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas, IReadOnlyDictionary<Posicao, Item> Itens) Gerar(int largura, int altura, Random random)
+    public (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas, IReadOnlyDictionary<Posicao, Item> Itens) Gerar(int largura, int altura, int andar, Random random)
     {
         var mapa = new MapaDaMasmorra(largura, altura);
         var salas = new List<Sala>();
@@ -67,7 +76,7 @@ public sealed class GeradorDeMasmorra
             EspalharTerreno(mapa, sala, random);
             EspalharPedras(mapa, sala, random);
             EspalharOuro(mapa, sala, random);
-            EspalharItens(mapa, sala, random, itens);
+            EspalharItens(mapa, sala, andar, random, itens);
             PosicionarPortas(mapa, sala);
         }
 
@@ -152,7 +161,7 @@ public sealed class GeradorDeMasmorra
         }
     }
 
-    private static void EspalharItens(MapaDaMasmorra mapa, Sala sala, Random random, Dictionary<Posicao, Item> itens)
+    private static void EspalharItens(MapaDaMasmorra mapa, Sala sala, int andar, Random random, Dictionary<Posicao, Item> itens)
     {
         if (sala.Largura <= 2 || sala.Altura <= 2)
             return;
@@ -166,10 +175,33 @@ public sealed class GeradorDeMasmorra
         if (mapa[x, y] != TipoDeCelula.Chao)
             return;
 
-        var item = CatalogoDeItens[random.Next(CatalogoDeItens.Length)]();
+        var item = EscolherItem(andar, random);
         var posicao = new Posicao(x, y);
         mapa[x, y] = TipoDeCelula.Item;
         itens[posicao] = item;
+    }
+
+    private static Item EscolherItem(int andar, Random random)
+    {
+        var tier = EscolherTier(andar, random);
+        var candidatos = CatalogoDeItens.Where(e => e.Tier == tier).ToArray();
+        return candidatos[random.Next(candidatos.Length)].Criar();
+    }
+
+    // andares rasos favorecem tier 1, andares fundos favorecem tier 3 -- sem isso o loot era
+    // identico do andar 1 ao 20 mesmo com o monstro ficando cada vez mais forte
+    private static int EscolherTier(int andar, Random random)
+    {
+        var (peso1, peso2, peso3) = andar switch
+        {
+            <= 3 => (70, 25, 5),
+            <= 7 => (30, 50, 20),
+            _ => (10, 40, 50)
+        };
+
+        var sorteio = random.Next(peso1 + peso2 + peso3);
+        if (sorteio < peso1) return 1;
+        return sorteio < peso1 + peso2 ? 2 : 3;
     }
 
     private static void PosicionarPortas(MapaDaMasmorra mapa, Sala sala)

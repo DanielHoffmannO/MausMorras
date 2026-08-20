@@ -10,7 +10,7 @@ public sealed partial class EstadoDoJogo
     private (MapaDaMasmorra Mapa, IReadOnlyList<Sala> Salas) GerarNivel()
     {
         var gerador = new GeradorDeMasmorra();
-        var (mapa, salas, itens) = gerador.Gerar(_largura, _altura, _random);
+        var (mapa, salas, itens) = gerador.Gerar(_largura, _altura, Andar, _random);
         _itensNoChao = new Dictionary<Posicao, Item>(itens);
         GerarMonstros(mapa, salas);
         return (mapa, salas);
@@ -38,11 +38,39 @@ public sealed partial class EstadoDoJogo
                 if (!mapa.EhCaminhavel(pos) || _monstros.Any(m => m.Posicao == pos))
                     continue;
 
-                _monstros.Add(new Monstro(pos, vidaMaxima, dano));
+                var tipo = EscolherTipoDeMonstro(_random, Andar);
+                var (vidaAjustada, danoAjustado) = AjustarPorTipoDeMonstro(vidaMaxima, dano, tipo);
+                _monstros.Add(new Monstro(pos, vidaAjustada, danoAjustado, tipo));
                 break;
             }
         }
     }
+
+    // andares rasos so tem Comum -- variedade (e o risco extra dela) so aparece conforme desce
+    private static TipoDeMonstro EscolherTipoDeMonstro(Random random, int andar)
+    {
+        var (pesoComum, pesoResistente, pesoFeroz) = andar switch
+        {
+            <= 2 => (100, 0, 0),
+            <= 5 => (60, 25, 15),
+            _ => (35, 35, 30)
+        };
+
+        var sorteio = random.Next(pesoComum + pesoResistente + pesoFeroz);
+        if (sorteio < pesoComum) return TipoDeMonstro.Comum;
+        return sorteio < pesoComum + pesoResistente ? TipoDeMonstro.Resistente : TipoDeMonstro.Feroz;
+    }
+
+    private static (int Vida, int Dano) AjustarPorTipoDeMonstro(int vidaBase, int danoBase, TipoDeMonstro tipo) => tipo switch
+    {
+        TipoDeMonstro.Resistente => (
+            Math.Max(1, (int)Math.Round(vidaBase * MultiplicadorVidaResistente)),
+            Math.Max(1, (int)Math.Round(danoBase * MultiplicadorDanoResistente))),
+        TipoDeMonstro.Feroz => (
+            Math.Max(1, (int)Math.Round(vidaBase * MultiplicadorVidaFeroz)),
+            Math.Max(1, (int)Math.Round(danoBase * MultiplicadorDanoFeroz))),
+        _ => (vidaBase, danoBase)
+    };
 
     private Posicao PrepararVila()
     {

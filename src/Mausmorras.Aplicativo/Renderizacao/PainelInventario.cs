@@ -1,3 +1,4 @@
+using System.Text;
 using Mausmorras.Nucleo.Itens;
 using Mausmorras.Nucleo.Jogo;
 
@@ -13,10 +14,11 @@ public sealed class PainelInventario : PainelDeEstado
     public const int AlturaTotal = AlturaInterna + 2;
 
     private static readonly TipoDeItem[] SlotsEquipamento =
-        { TipoDeItem.Capacete, TipoDeItem.Peitoral, TipoDeItem.Pernas, TipoDeItem.Botas };
+        { TipoDeItem.Arma, TipoDeItem.Capacete, TipoDeItem.Peitoral, TipoDeItem.Pernas, TipoDeItem.Botas };
 
     private static readonly Dictionary<TipoDeItem, string> NomesSlot = new()
     {
+        [TipoDeItem.Arma] = "Arma",
         [TipoDeItem.Capacete] = "Capacete",
         [TipoDeItem.Peitoral] = "Peitoral",
         [TipoDeItem.Pernas] = "Pernas",
@@ -67,11 +69,19 @@ public sealed class PainelInventario : PainelDeEstado
 
     protected override void Desenhar(EstadoDoJogo estado)
     {
-        this.DesenharMoldura(LarguraInterna, AlturaInterna, Cores.TextoPrincipal, "Inventário");
-
         var personagem = estado.Personagem;
+        this.DesenharMoldura(LarguraInterna, AlturaInterna, Cores.TextoPrincipal, $"Inventário de {personagem.Nome}");
 
-        SetAttribute(new Attribute(Cores.TextoPrincipal, Cores.Fundo));
+        // divisorias entre as tres colunas, no mesmo estilo de traco da moldura -- sem isso as
+        // colunas viravam so blocos de texto flutuando lado a lado, sem nenhuma separacao visual
+        SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
+        for (var y = 1; y <= AlturaInterna - 3; y++)
+        {
+            AddRune(32, y, new Rune('│'));
+            AddRune(64, y, new Rune('│'));
+        }
+
+        SetAttribute(new Attribute(Cores.Selecao, Cores.Fundo));
         AddStr(2, 1, "Equipamento");
         AddStr(34, 1, "Mochila");
         AddStr(66, 1, "Baú (compartilhado)");
@@ -81,14 +91,15 @@ public sealed class PainelInventario : PainelDeEstado
             var slot = SlotsEquipamento[i];
             var item = personagem.ObterEquipado(slot);
             var texto = $"{NomesSlot[slot]}: {(item is null ? "(vazio)" : item.Nome)}";
-            DesenharLinha(2, 3 + i, texto, _coluna == Coluna.Equipamento && _indiceEquipamento == i);
+            DesenharLinha(2, 3 + i, texto, item is not null, _coluna == Coluna.Equipamento && _indiceEquipamento == i);
         }
 
+        var corVida = (double)personagem.Vida / personagem.VidaMaxima <= 0.3 ? Cores.Perigo : Cores.TextoSecundario;
+        SetAttribute(new Attribute(corVida, Cores.Fundo));
+        AddStr(2, 9, $"Vida: {DesenhoDeCaixa.DesenharBarra(personagem.Vida, personagem.VidaMaxima, 10)} {personagem.Vida}/{personagem.VidaMaxima}");
         SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
-        AddStr(2, 8, $"Defesa total: {personagem.DefesaTotal}");
-        AddStr(2, 9, $"Vida: {personagem.Vida}/{personagem.VidaMaxima}   Ouro: {estado.Ouro}");
-        AddStr(2, 10, $"Madeira: {estado.Madeira}   Fome: {personagem.Fome}");
-        AddStr(2, 11, $"Traço: {personagem.Traco}");
+        AddStr(2, 10, $"Ataque: +{personagem.AtaqueTotal}   Defesa: {personagem.DefesaTotal}   Traço: {personagem.Traco}");
+        AddStr(2, 11, $"Ouro: {estado.Ouro}   Madeira: {estado.Madeira}   Fome: {personagem.Fome}");
 
         if (personagem.Mochila.Count == 0)
         {
@@ -100,7 +111,7 @@ public sealed class PainelInventario : PainelDeEstado
             for (var i = 0; i < personagem.Mochila.Count && i < AlturaInterna - 6; i++)
             {
                 var texto = $"{i + 1}) {personagem.Mochila[i].Nome}";
-                DesenharLinha(34, 3 + i, texto, _coluna == Coluna.Mochila && _indiceMochila == i);
+                DesenharLinha(34, 3 + i, texto, true, _coluna == Coluna.Mochila && _indiceMochila == i);
             }
         }
 
@@ -114,7 +125,7 @@ public sealed class PainelInventario : PainelDeEstado
             for (var i = 0; i < estado.Bau.Count && i < AlturaInterna - 6; i++)
             {
                 var texto = $"{i + 1}) {estado.Bau[i].Nome}";
-                DesenharLinha(66, 3 + i, texto, _coluna == Coluna.Bau && _indiceBau == i);
+                DesenharLinha(66, 3 + i, texto, true, _coluna == Coluna.Bau && _indiceBau == i);
             }
         }
 
@@ -123,13 +134,20 @@ public sealed class PainelInventario : PainelDeEstado
         AddStr(2, AlturaInterna - 1, "Del joga no lixo   I ou Esc fecha");
     }
 
-    private void DesenharLinha(int x, int y, string texto, bool selecionado)
+    private void DesenharLinha(int x, int y, string texto, bool preenchido, bool selecionado)
     {
-        var textoFormatado = texto.Length > LarguraColuna ? texto[..LarguraColuna] : texto.PadRight(LarguraColuna);
+        // cursor "▸" alem da cor invertida -- so a cor sozinha (um bloco solido tomando a linha
+        // inteira) deixava a selecao dificil de notar rapido, alem de nao dar nenhum indicio de
+        // "voce esta aqui" quando o olho ja passou batido pela cor
+        var prefixo = selecionado ? "▸ " : "  ";
+        var textoFormatado = (prefixo + texto).Length > LarguraColuna
+            ? (prefixo + texto)[..LarguraColuna]
+            : (prefixo + texto).PadRight(LarguraColuna);
 
+        var cor = selecionado ? Cores.Selecao : preenchido ? Cores.TextoPrincipal : Cores.TextoSecundario;
         SetAttribute(selecionado
-            ? new Attribute(Cores.Fundo, Cores.Selecao)
-            : new Attribute(Cores.TextoSecundario, Cores.Fundo));
+            ? new Attribute(Cores.Fundo, cor)
+            : new Attribute(cor, Cores.Fundo));
 
         AddStr(x, y, textoFormatado);
     }

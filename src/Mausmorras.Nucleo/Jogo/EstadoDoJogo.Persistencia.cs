@@ -22,14 +22,12 @@ public sealed partial class EstadoDoJogo
             Ouro = Ouro,
             Personagens = _personagens.Select(ParaSalvoPersonagem).ToList(),
             IndiceSelecionado = _indiceSelecionado,
-            Celulas = new int[Mapa.Largura * Mapa.Altura],
-            Explorada = new bool[Mapa.Largura * Mapa.Altura],
             Mensagens = _mensagens.ToList(),
             ItensNoChao = _itensNoChao
                 .Select(kv => new ItemNoChaoSalvo { X = kv.Key.X, Y = kv.Key.Y, Item = ParaSalvo(kv.Value) })
                 .ToList(),
             Bichos = _bichos.Select(b => new BichoSalvo { X = b.Posicao.X, Y = b.Posicao.Y }).ToList(),
-            Monstros = _monstros.Select(m => new MonstroSalvo { X = m.Posicao.X, Y = m.Posicao.Y, Vida = m.Vida, VidaMaxima = m.VidaMaxima, Dano = m.Dano }).ToList(),
+            Monstros = _monstros.Select(m => new MonstroSalvo { X = m.Posicao.X, Y = m.Posicao.Y, Vida = m.Vida, VidaMaxima = m.VidaMaxima, Dano = m.Dano, Tipo = m.Tipo }).ToList(),
             FogueirasAtivas = _fogueirasAtivas.Select(f => new FogueiraAtivaSalva { X = f.Posicao.X, Y = f.Posicao.Y, TurnoDeExpiracao = f.TurnoDeExpiracao }).ToList(),
             PrimeiroAbrigoConstruido = _primeiroAbrigoConstruido,
             NumeroDeCasas = _numeroDeCasas,
@@ -37,14 +35,15 @@ public sealed partial class EstadoDoJogo
             Bau = _bau.Select(ParaSalvo).ToList()
         };
 
-        for (var x = 0; x < Mapa.Largura; x++)
+        (dto.Celulas, dto.Explorada) = SerializarMapa(Mapa);
+
+        // a vila e o unico mapa que sobrevive por toda a sessao (a masmorra sempre regenera ao
+        // entrar/descer) -- precisa ser serializada mesmo quando nao e o mapa "atual"
+        if (_mapaDaVila is not null)
         {
-            for (var y = 0; y < Mapa.Altura; y++)
-            {
-                var indice = y * Mapa.Largura + x;
-                dto.Celulas[indice] = (int)Mapa[x, y];
-                dto.Explorada[indice] = Mapa.FoiExplorada(x, y);
-            }
+            (dto.CelulasDaVila, dto.ExploradaDaVila) = ReferenceEquals(_mapaDaVila, Mapa)
+                ? (dto.Celulas, dto.Explorada)
+                : SerializarMapa(_mapaDaVila);
         }
 
         File.WriteAllText(caminho, JsonSerializer.Serialize(dto));
@@ -56,17 +55,7 @@ public sealed partial class EstadoDoJogo
         var dto = JsonSerializer.Deserialize<EstadoSalvo>(File.ReadAllText(caminho))
                    ?? throw new InvalidDataException("Arquivo de save inválido.");
 
-        var mapa = new MapaDaMasmorra(dto.Largura, dto.Altura);
-        for (var x = 0; x < dto.Largura; x++)
-        {
-            for (var y = 0; y < dto.Altura; y++)
-            {
-                var indice = y * dto.Largura + x;
-                mapa[x, y] = (TipoDeCelula)dto.Celulas[indice];
-                if (dto.Explorada[indice])
-                    mapa.MarcarExplorada(x, y);
-            }
-        }
+        var mapa = DesserializarMapa(dto.Largura, dto.Altura, dto.Celulas, dto.Explorada);
 
         List<Personagem> personagens;
         int indiceSelecionado;
@@ -81,7 +70,8 @@ public sealed partial class EstadoDoJogo
             // save antigo (pre-multi-personagem): migra o unico personagem dos campos achatados legados
             var legado = new Personagem(new Posicao(dto.JogadorX, dto.JogadorY), dto.VidaMaximaJogador)
             {
-                Vida = dto.VidaJogador
+                Vida = dto.VidaJogador,
+                Nome = NomesDisponiveis[Random.Shared.Next(NomesDisponiveis.Length)]
             };
 
             legado.Mochila.AddRange(dto.Mochila.Select(DeSalvo));
@@ -114,7 +104,7 @@ public sealed partial class EstadoDoJogo
             Andar = dto.Andar,
             _itensNoChao = dto.ItensNoChao.ToDictionary(i => new Posicao(i.X, i.Y), i => DeSalvo(i.Item)),
             _bichos = dto.Bichos.Select(b => new Bicho(new Posicao(b.X, b.Y))).ToList(),
-            _monstros = dto.Monstros.Select(m => new Monstro(new Posicao(m.X, m.Y), m.VidaMaxima, m.Dano) { Vida = m.Vida }).ToList()
+            _monstros = dto.Monstros.Select(m => new Monstro(new Posicao(m.X, m.Y), m.VidaMaxima, m.Dano, m.Tipo) { Vida = m.Vida }).ToList()
         };
 
         if (dto.Andar == 0)
@@ -122,6 +112,12 @@ public sealed partial class EstadoDoJogo
             estado._mapaDaVila = mapa;
             var spawnDeRetorno = estado.Personagem.Posicao;
             estado._salasDaVila = new[] { new Sala(spawnDeRetorno.X, spawnDeRetorno.Y, 1, 1) };
+        }
+        else if (dto.CelulasDaVila.Length == LarguraDaVila * AlturaDaVila)
+        {
+            // save feito de dentro da masmorra -- antes disso a vila nunca era serializada nesse caso,
+            // e uma vila inteiramente nova era gerada no carregamento seguinte (casas/fogueiras/bau perdidos)
+            estado._mapaDaVila = DesserializarMapa(LarguraDaVila, AlturaDaVila, dto.CelulasDaVila, dto.ExploradaDaVila);
         }
 
         if (estado._mapaDaVila is not null)
@@ -160,6 +156,40 @@ public sealed partial class EstadoDoJogo
     private static int ResgatarEstoqueLegado(int atual, int legadoAchatado, IEnumerable<int> legadoPorPersonagem) =>
         atual != 0 ? atual : legadoAchatado != 0 ? legadoAchatado : legadoPorPersonagem.Sum();
 
+    private static (int[] Celulas, bool[] Explorada) SerializarMapa(MapaDaMasmorra mapa)
+    {
+        var celulas = new int[mapa.Largura * mapa.Altura];
+        var explorada = new bool[mapa.Largura * mapa.Altura];
+        for (var x = 0; x < mapa.Largura; x++)
+        {
+            for (var y = 0; y < mapa.Altura; y++)
+            {
+                var indice = y * mapa.Largura + x;
+                celulas[indice] = (int)mapa[x, y];
+                explorada[indice] = mapa.FoiExplorada(x, y);
+            }
+        }
+
+        return (celulas, explorada);
+    }
+
+    private static MapaDaMasmorra DesserializarMapa(int largura, int altura, int[] celulas, bool[] explorada)
+    {
+        var mapa = new MapaDaMasmorra(largura, altura);
+        for (var x = 0; x < largura; x++)
+        {
+            for (var y = 0; y < altura; y++)
+            {
+                var indice = y * largura + x;
+                mapa[x, y] = (TipoDeCelula)celulas[indice];
+                if (explorada[indice])
+                    mapa.MarcarExplorada(x, y);
+            }
+        }
+
+        return mapa;
+    }
+
     private static ItemSalvo ParaSalvo(Item item) => new() { Nome = item.Nome, Tipo = item.Tipo, Valor = item.Valor };
 
     private static Item DeSalvo(ItemSalvo salvo) => new(salvo.Nome, salvo.Tipo, salvo.Valor);
@@ -176,6 +206,7 @@ public sealed partial class EstadoDoJogo
 
     private static PersonagemSalvo ParaSalvoPersonagem(Personagem p) => new()
     {
+        Nome = p.Nome,
         X = p.Posicao.X,
         Y = p.Posicao.Y,
         Vida = p.Vida,
@@ -195,13 +226,15 @@ public sealed partial class EstadoDoJogo
         Capacete = p.Capacete is { } c ? ParaSalvo(c) : null,
         Peitoral = p.Peitoral is { } pe ? ParaSalvo(pe) : null,
         Pernas = p.Pernas is { } pr ? ParaSalvo(pr) : null,
-        Botas = p.Botas is { } b ? ParaSalvo(b) : null
+        Botas = p.Botas is { } b ? ParaSalvo(b) : null,
+        Arma = p.Arma is { } a ? ParaSalvo(a) : null
     };
 
     private static Personagem DeSalvoPersonagem(PersonagemSalvo s)
     {
         var p = new Personagem(new Posicao(s.X, s.Y), s.VidaMaxima)
         {
+            Nome = s.Nome ?? NomesDisponiveis[Random.Shared.Next(NomesDisponiveis.Length)],
             Vida = s.Vida, Fome = s.Fome, Temperatura = s.Temperatura, Sono = s.Sono,
             EhCrianca = s.EhCrianca, Idade = s.Idade,
             Traco = (TracoDePersonalidade)s.Traco, AversaoAoFrio = s.AversaoAoFrio, AversaoAFome = s.AversaoAFome, AversaoAoSono = s.AversaoAoSono,
@@ -212,6 +245,7 @@ public sealed partial class EstadoDoJogo
         if (s.Peitoral is { } pe) p.Peitoral = DeSalvo(pe);
         if (s.Pernas is { } pr) p.Pernas = DeSalvo(pr);
         if (s.Botas is { } b) p.Botas = DeSalvo(b);
+        if (s.Arma is { } a) p.Arma = DeSalvo(a);
         return p;
     }
 }

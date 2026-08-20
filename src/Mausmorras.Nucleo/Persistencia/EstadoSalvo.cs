@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Mausmorras.Nucleo.Entidades;
 using Mausmorras.Nucleo.Itens;
 using Mausmorras.Nucleo.Jogo;
 
@@ -27,6 +28,11 @@ public sealed class EstadoSalvo
     public int IndiceSelecionado { get; set; }
     public int[] Celulas { get; set; } = Array.Empty<int>();
     public bool[] Explorada { get; set; } = Array.Empty<bool>();
+
+    // a vila sobrevive por toda a sessao mesmo quando o mapa "atual" (Celulas/Explorada acima) e o
+    // da masmorra -- sem isso, salvar de dentro da masmorra perdia casas/fogueiras/bau inteiros
+    public int[] CelulasDaVila { get; set; } = Array.Empty<int>();
+    public bool[] ExploradaDaVila { get; set; } = Array.Empty<bool>();
     public List<string> Mensagens { get; set; } = new();
     public List<ItemSalvo> Mochila { get; set; } = new();
     public ItemSalvo? Capacete { get; set; }
@@ -45,6 +51,7 @@ public sealed class EstadoSalvo
 
 public sealed class PersonagemSalvo
 {
+    public string? Nome { get; set; } // null em saves de antes dessa feature -- migra pra um nome sorteado, ver EstadoDoJogo.Persistencia.cs
     public int X { get; set; }
     public int Y { get; set; }
     public int Vida { get; set; }
@@ -68,6 +75,7 @@ public sealed class PersonagemSalvo
     public ItemSalvo? Peitoral { get; set; }
     public ItemSalvo? Pernas { get; set; }
     public ItemSalvo? Botas { get; set; }
+    public ItemSalvo? Arma { get; set; }
 }
 
 public sealed class BichoSalvo
@@ -83,6 +91,7 @@ public sealed class MonstroSalvo
     public int Vida { get; set; }
     public int VidaMaxima { get; set; }
     public int Dano { get; set; }
+    public TipoDeMonstro Tipo { get; set; } // saves de antes dessa feature nao tem o campo -- default (0) cai em Comum, o unico tipo que existia
 }
 
 public sealed class FogueiraAtivaSalva

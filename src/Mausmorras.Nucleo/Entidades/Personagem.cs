@@ -6,6 +6,7 @@ namespace Mausmorras.Nucleo.Entidades;
 public sealed class Personagem
 {
     public Posicao Posicao { get; set; }
+    public string Nome { get; set; } = "";
     public int VidaMaxima { get; }
     public int Vida { get; set; }
     public int Fome { get; set; }
@@ -34,10 +35,12 @@ public sealed class Personagem
     public Item? Peitoral { get; set; }
     public Item? Pernas { get; set; }
     public Item? Botas { get; set; }
+    public Item? Arma { get; set; }
     public List<Item> Mochila { get; } = new();
 
     public int DefesaTotal =>
         (Capacete?.Valor ?? 0) + (Peitoral?.Valor ?? 0) + (Pernas?.Valor ?? 0) + (Botas?.Valor ?? 0);
+    public int AtaqueTotal => Arma?.Valor ?? 0;
 
     public Personagem(Posicao posicaoInicial, int vidaMaxima = 20)
     {
@@ -52,6 +55,7 @@ public sealed class Personagem
         TipoDeItem.Peitoral => Peitoral,
         TipoDeItem.Pernas => Pernas,
         TipoDeItem.Botas => Botas,
+        TipoDeItem.Arma => Arma,
         _ => null
     };
 
@@ -63,6 +67,7 @@ public sealed class Personagem
             case TipoDeItem.Peitoral: Peitoral = item; break;
             case TipoDeItem.Pernas: Pernas = item; break;
             case TipoDeItem.Botas: Botas = item; break;
+            case TipoDeItem.Arma: Arma = item; break;
         }
     }
 }

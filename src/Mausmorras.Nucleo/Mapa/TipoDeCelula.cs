@@ -22,5 +22,6 @@ public enum TipoDeCelula
     Fogueira,
     ArvoreFrutifera,
     Cama,
-    Bau
+    Bau,
+    Plantacao
 }

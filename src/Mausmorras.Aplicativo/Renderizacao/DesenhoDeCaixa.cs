@@ -31,4 +31,10 @@ internal static class DesenhoDeCaixa
             view.AddStr((larguraInterna + 2 - textoTitulo.Length) / 2, 0, textoTitulo);
         }
     }
+
+    public static string DesenharBarra(int valor, int maximo, int largura)
+    {
+        var preenchido = maximo <= 0 ? 0 : Math.Clamp((int)Math.Round((double)valor / maximo * largura), 0, largura);
+        return "[" + new string('█', preenchido) + new string('░', largura - preenchido) + "]";
+    }
 }

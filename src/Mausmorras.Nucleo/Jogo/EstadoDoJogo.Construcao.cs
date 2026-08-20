@@ -160,4 +160,42 @@ public sealed partial class EstadoDoJogo
 
     private bool PosicaoOcupadaPorOutroPersonagem(Posicao p, Personagem construtor) =>
         _personagens.Any(pe => !ReferenceEquals(pe, construtor) && EstaNaVila(pe) && pe.Posicao == p);
+
+    // so em Grama de proposito -- Terra existe no jogo mas nunca aparece na vila (so na masmorra),
+    // entao exigir Terra deixaria o plantio impossivel de usar; Grama e o que cobre a vila de verdade
+    private bool TerrenoPlantavel(MapaDaMasmorra mapa, Posicao p) =>
+        mapa.DentroDosLimites(p.X, p.Y) && mapa[p.X, p.Y] == TipoDeCelula.Grama;
+
+    private void Plantar(MapaDaMasmorra mapa, Posicao posicao)
+    {
+        mapa[posicao.X, posicao.Y] = TipoDeCelula.Plantacao;
+        _proximaColheitaDisponivel[posicao] = _turno + TurnosParaAmadurecerPlantacao;
+    }
+
+    public bool TentarPlantar()
+    {
+        if (Morto || Modo != ModoDeJogo.Jogando || LocalAtual != TipoDeLocal.Vila)
+            return false;
+
+        var posicao = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, 1);
+
+        if (!TerrenoPlantavel(Mapa, posicao) || PosicaoOcupadaPorOutroPersonagem(posicao, Personagem))
+        {
+            AdicionarMensagem("Não há terreno adequado para plantar aqui.");
+            return false;
+        }
+
+        Plantar(Mapa, posicao);
+        AdicionarMensagem("Você planta uma horta.");
+        FalarSobre(Personagem, "plantio");
+        AvancarTurno();
+        return true;
+    }
+
+    public (Posicao Posicao, bool Valida) ObterPreviaDePlantio()
+    {
+        var posicao = CalcularPosicaoNaDirecao(Personagem.Posicao, _ultimaDirecao, 1);
+        var valida = LocalAtual == TipoDeLocal.Vila && TerrenoPlantavel(Mapa, posicao) && !PosicaoOcupadaPorOutroPersonagem(posicao, Personagem);
+        return (posicao, valida);
+    }
 }

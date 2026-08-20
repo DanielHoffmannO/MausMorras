@@ -7,5 +7,6 @@ public enum TipoDeItem
     Pernas,
     Botas,
     Generico,
-    Comida
+    Comida,
+    Arma
 }

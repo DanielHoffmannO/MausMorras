@@ -5,7 +5,7 @@ public sealed class Item
     public string Nome { get; }
     public TipoDeItem Tipo { get; }
 
-    /// <summary>Defesa para equipamento, cura para itens genéricos (poções).</summary>
+    /// <summary>Defesa para equipamento defensivo, ataque para armas, cura para itens genéricos (poções).</summary>
     public int Valor { get; }
 
     public Item(string nome, TipoDeItem tipo, int valor)

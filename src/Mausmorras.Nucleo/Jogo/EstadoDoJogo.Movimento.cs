@@ -22,13 +22,26 @@ public sealed partial class EstadoDoJogo
 
         if (Mapa[alvo.X, alvo.Y] == TipoDeCelula.ArvoreFrutifera)
         {
-            if (!PodeColherFruta(alvo))
+            if (!PodeColher(alvo))
             {
                 AdicionarMensagem("A árvore frutífera ainda não tem frutas para colher.");
                 return false;
             }
 
             ColherFruta(alvo);
+            AvancarTurno();
+            return true;
+        }
+
+        if (Mapa[alvo.X, alvo.Y] == TipoDeCelula.Plantacao)
+        {
+            if (!PodeColher(alvo))
+            {
+                AdicionarMensagem("A plantação ainda não está pronta para colher.");
+                return false;
+            }
+
+            ColherPlantacao(alvo);
             AvancarTurno();
             return true;
         }
@@ -111,13 +124,24 @@ public sealed partial class EstadoDoJogo
         FalarSobre(Personagem, "fruta");
     }
 
+    // colheita unica -- ao contrario da fruta, a plantacao volta a ser Grama depois (ver TentarPlantar)
+    private void ColherPlantacao(Posicao posicao)
+    {
+        Mapa[posicao.X, posicao.Y] = TipoDeCelula.Grama;
+        _proximaColheitaDisponivel.Remove(posicao);
+        Personagem.Mochila.Add(new Item("Vegetais", TipoDeItem.Comida, ValorDoVegetal));
+        AdicionarMensagem("Você colhe a plantação e ganha vegetais.");
+        FalarSobre(Personagem, "plantio");
+    }
+
     // cuida so do ataque do jogador (dano no monstro, morte/loot) -- a retaliacao do monstro (se
     // sobreviver) acontece exclusivamente em MoverMonstros, chamado logo a seguir por AvancarTurno.
     // manter as duas coisas separadas evita o monstro bater duas vezes no mesmo turno (uma aqui,
     // outra em MoverMonstros, ja que ele continua adjacente depois do bump)
     private void ResolverCombate(Monstro monstro)
     {
-        monstro.Vida = Math.Max(0, monstro.Vida - DanoDoJogador);
+        var dano = DanoBaseDoJogador + Personagem.AtaqueTotal;
+        monstro.Vida = Math.Max(0, monstro.Vida - dano);
 
         if (monstro.Vida <= 0)
         {
@@ -127,6 +151,6 @@ public sealed partial class EstadoDoJogo
             return;
         }
 
-        AdicionarMensagem($"Você ataca o monstro e causa {DanoDoJogador} de dano.");
+        AdicionarMensagem($"Você ataca o monstro e causa {dano} de dano.");
     }
 }

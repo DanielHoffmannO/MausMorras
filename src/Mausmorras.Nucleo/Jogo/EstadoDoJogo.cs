@@ -12,7 +12,7 @@ public sealed partial class EstadoDoJogo
     private const int OuroPorPilha = 10;
 
     // combate na masmorra
-    private const int DanoDoJogador = 5;
+    private const int DanoBaseDoJogador = 5; // desarmado -- Personagem.AtaqueTotal soma o bonus da arma equipada
     private const int VidaBaseDoMonstro = 10;
     private const int IncrementoDeVidaPorAndar = 4;
     private const int DanoBaseDoMonstro = 3;
@@ -21,7 +21,16 @@ public sealed partial class EstadoDoJogo
     private const int NumeroBaseDeMonstros = 2;
     private const int AndaresPorIncrementoDeMonstro = 2; // +1 monstro a cada 2 andares
     private const int RaioDeDeteccaoDoMonstro = 6; // distancia manhattan pra comecar a perseguir
+
+    // variedade de monstro -- mesmo "orcamento" de perigo, distribuido diferente: Resistente aguenta
+    // mais pancada mas bate mais fraco, Feroz e o oposto (perigoso mas morre rapido se acertado)
+    private const double MultiplicadorVidaResistente = 1.8;
+    private const double MultiplicadorDanoResistente = 0.7;
+    private const double MultiplicadorVidaFeroz = 0.6;
+    private const double MultiplicadorDanoFeroz = 1.8;
     private const int IntervaloDeRegeneracao = 10; // cura 1 ponto a cada N turnos seguro -- 160 turnos (1 dia) pra sair de ~30% de vida ate o teto, bem mais lento que o dano ambiental (1/turno)
+    private const int IntervaloDeCuraDeAversao = 40; // mais lento que a regeneracao de vida -- e um arco de recuperacao longo, nao uma cura rapida
+    private const double CuraDeAversaoPorIntervalo = 0.1; // 1 ponto inteiro de aversao leva 400 turnos seguros (~2.5 dias) pra sumir por completo
 
     // expedicoes autonomas a masmorra + conversao de ouro
     private const int CustoDeOuroPorConversao = OuroPorPilha;
@@ -111,7 +120,39 @@ public sealed partial class EstadoDoJogo
     private const int TurnosDeRegrowthDaFruta = TurnosPorMetadeDoDia; // meio dia de folga antes de poder colher de novo no mesmo pe
     private const double ChanceDeArvoreFrutiferaAoRebrotar = 0.2;
 
+    // plantio: ao contrario da fruta (rebrota sozinha na mesma arvore), a plantacao e colheita
+    // unica -- depois de colhida volta a ser Grama e precisa ser replantada. sem custo de recurso
+    // de proposito (o "custo" e so o tempo de espera), pra ser um complemento de baixo risco a caca
+    private const int TurnosParaAmadurecerPlantacao = TurnosPorMetadeDoDia;
+    private const int ValorDoVegetal = 60; // entre ValorDaFruta (sem esforco de plantio) e ValorDaCarne (exige cacar)
+
     private static readonly Posicao[] Direcoes = { Direcao.Norte, Direcao.Sul, Direcao.Leste, Direcao.Oeste };
+
+    // pool grande o bastante pra colonia inteira raramente repetir nome numa sessao normal --
+    // ver EscolherNome. sem genero associado de proposito, ja que Personagem nao modela genero
+    private static readonly string[] NomesDisponiveis =
+    {
+        "Ana", "Bruno", "Carla", "Diego", "Elisa", "Fábio", "Gabriela", "Heitor",
+        "Inês", "João", "Karina", "Lucas", "Marina", "Nelson", "Olívia", "Pedro",
+        "Quitéria", "Rafael", "Sofia", "Tiago", "Úrsula", "Vitor", "Wilma", "Xavier",
+        "Yasmin", "Zeca", "Amanda", "Breno", "Camila", "Danilo", "Eduarda", "Felipe",
+        "Giovana", "Hugo", "Isabela", "Júlio", "Kátia", "Leonardo", "Mariana", "Otávio"
+    };
+
+    // evita nome repetido enquanto o pool aguentar -- numa sessao bem longa, com varios filhos
+    // nascendo, o pool pode se esgotar; melhor aceitar uma repeticao do que travar procurando
+    private string EscolherNome()
+    {
+        var nomesEmUso = _personagens.Select(p => p.Nome).ToHashSet();
+        for (var tentativa = 0; tentativa < 20; tentativa++)
+        {
+            var nome = NomesDisponiveis[_random.Next(NomesDisponiveis.Length)];
+            if (!nomesEmUso.Contains(nome))
+                return nome;
+        }
+
+        return NomesDisponiveis[_random.Next(NomesDisponiveis.Length)];
+    }
 
     private readonly List<string> _mensagens = new();
     private readonly List<string> _conversas = new();
@@ -156,6 +197,14 @@ public sealed partial class EstadoDoJogo
     public IReadOnlyList<string> Conversas => _conversas;
     public IReadOnlyList<Item> Bau => _bau;
     public bool Morto => Personagem.Vida <= 0;
+    // nenhum adulto nem crianca sobrevive em lugar nenhum (nem em expedicao) -- sem chance de
+    // recuperacao. computado (nao um campo salvo) pra sempre refletir o estado atual de _personagens
+    public bool JogoEncerrado => Morto && !_personagens.Any(p => p.Vida > 0);
+    // nenhum adulto vivo, mas ainda ha crianca(s) que podem crescer e virar controlaveis (ver
+    // AtualizarCrescimento) -- diferente de JogoEncerrado, ainda e recuperavel: basta manter o Modo
+    // Observador rodando ate alguma completar TurnosParaCrescer
+    public bool SoRestamCriancas => Morto && !JogoEncerrado && !_personagens.Any(p => p.Vida > 0 && !p.EhCrianca);
+    public int PopulacaoTotal => _personagens.Count; // inclui falecidos -- historico da colonia inteira, nao so quem sobrou
     public int Turno => _turno;
     public bool EhDia => (_turno / TurnosPorMetadeDoDia) % 2 == 0;
     public int Dia => _turno / (TurnosPorMetadeDoDia * 2) + 1;
@@ -182,7 +231,7 @@ public sealed partial class EstadoDoJogo
                 vidaMaxima = VidaMaximaAleatoria();
             vidasMaximasUsadas.Add(vidaMaxima);
 
-            _personagens.Add(new Personagem(new Posicao(spawn.X + i, spawn.Y), vidaMaxima) { Traco = TracoAleatorio() });
+            _personagens.Add(new Personagem(new Posicao(spawn.X + i, spawn.Y), vidaMaxima) { Traco = TracoAleatorio(), Nome = EscolherNome() });
         }
         _indiceSelecionado = 0;
 
@@ -324,6 +373,7 @@ public sealed partial class EstadoDoJogo
         AtualizarTemperatura();
         AtualizarFogueiras();
         AtualizarRegeneracao();
+        AtualizarCuraDeAversao();
         TransferirControleAoMorrer();
         AtualizarVisibilidade();
     }
@@ -488,6 +538,14 @@ public sealed partial class EstadoDoJogo
                 (c.EhCrianca || (double)c.Vida / c.VidaMaxima <= LimiarVidaParaMedoDeMorrer));
             var severidadeDeQuemPrecisa = alguemPrecisandoDeComida is not null ? (double)alguemPrecisandoDeComida.Fome / FomeMaxima : 0.0;
 
+            // crianca e fisicamente imovel (ver TentarNascerCrianca) -- se o abrigo que a protegia no
+            // nascimento expira depois (fogueira apaga), ela nao tem como se salvar sozinha do frio.
+            // mesmo espirito da cooperacao de comida acima, so que so dispara em frio REALMENTE severo
+            var criancaEmPerigoDeFrio = _personagens.FirstOrDefault(c =>
+                c.EhCrianca && c.Vida > 0 && EstaNaVila(c) && !EstaProtegidoDoFrio(c) &&
+                SeveridadesDe(c).Temperatura >= SeveridadeMinimaParaInterromperPorFrio);
+            var severidadeDaCriancaComFrio = criancaEmPerigoDeFrio is not null ? SeveridadesDe(criancaEmPerigoDeFrio).Temperatura : 0.0;
+
             // "compromisso de acao": uma vez que a pessoa comeca a perseguir uma necessidade, ela so
             // troca de alvo se outra ficar CLARAMENTE mais severa (margem abaixo). Sem isso, quando
             // duas necessidades sobem juntas com severidade parecida (ex: fome e sono), a escolha
@@ -502,6 +560,7 @@ public sealed partial class EstadoDoJogo
             if (sonoUrgente && _existeCasaNaVila) candidatos.Add(("sono", sonoSeveridade, () => TentarDormir(p)));
             if (anoitecerIminente) candidatos.Add(("anoitecer", severidadeAnoitecer, () => TentarBuscarAbrigo(p)));
             if (alguemPrecisandoDeComida is not null) candidatos.Add(("cooperacao", severidadeDeQuemPrecisa, () => TentarAjudarComFome(p, alguemPrecisandoDeComida!)));
+            if (criancaEmPerigoDeFrio is not null) candidatos.Add(("resgate_frio", severidadeDaCriancaComFrio, () => TentarResgatarCriancaDoFrio(p, criancaEmPerigoDeFrio!)));
 
             Action? acaoVencedora = null;
 
@@ -512,8 +571,10 @@ public sealed partial class EstadoDoJogo
 
                 // frio (quando REALMENTE severo) e o aviso antecipado de anoitecer nunca ficam presos
                 // atras de um compromisso. "medo de morrer" tambem nao -- com a vida criticamente baixa,
-                // a propria sobrevivencia (fome/frio/sono) nunca fica presa atras de um compromisso antigo
-                var ehUrgenciaDeFrio = maisSevero.Rotulo == "anoitecer"
+                // a propria sobrevivencia (fome/frio/sono) nunca fica presa atras de um compromisso antigo.
+                // resgate_frio so entra na lista de candidatos ja acima do limiar severo (ver filtro de
+                // criancaEmPerigoDeFrio), entao sempre que vence a disputa e tratado com a mesma urgencia
+                var ehUrgenciaDeFrio = maisSevero.Rotulo is "anoitecer" or "resgate_frio"
                     || (maisSevero.Rotulo == "frio" && maisSevero.Severidade >= SeveridadeMinimaParaInterromperPorFrio)
                     || (estaComMedo && maisSevero.Rotulo is "fome" or "frio" or "sono");
 
@@ -671,9 +732,9 @@ public sealed partial class EstadoDoJogo
                 if (_random.NextDouble() >= ChanceDeNascimentoPorTurno)
                     return;
 
-                var crianca = new Personagem(posicaoNascimento, _random.Next(VidaMaximaMinimaCrianca, VidaMaximaMaximaCrianca + 1)) { EhCrianca = true, Traco = TracoAleatorio() };
+                var crianca = new Personagem(posicaoNascimento, _random.Next(VidaMaximaMinimaCrianca, VidaMaximaMaximaCrianca + 1)) { EhCrianca = true, Traco = TracoAleatorio(), Nome = EscolherNome() };
                 _personagens.Add(crianca);
-                AdicionarMensagem("Uma criança nasce na vila!");
+                AdicionarMensagem($"Uma criança nasce na vila! Ela se chama {crianca.Nome}.");
                 FalarSobre(a, "nascimento");
                 return;
             }
@@ -709,6 +770,26 @@ public sealed partial class EstadoDoJogo
                 continue;
 
             p.Vida = Math.Min(p.VidaMaxima, p.Vida + 1);
+        }
+    }
+
+    // tempo seguro reduz gradualmente o trauma acumulado -- sem isso a aversao so cresce pra sempre
+    // e uma vila que sobrevive muitos turnos vira permanentemente hiper-cautelosa, sem arco de
+    // recuperacao (mesmo gate de EstaNaVila/EstaSeguro que AtualizarRegeneracao usa)
+    private void AtualizarCuraDeAversao()
+    {
+        if (_turno % IntervaloDeCuraDeAversao != 0)
+            return;
+
+        foreach (var p in _personagens)
+        {
+            if (p.Vida <= 0 || !EstaNaVila(p) || !EstaSeguro(p))
+                continue;
+
+            p.AversaoAoFrio = Math.Max(0, p.AversaoAoFrio - CuraDeAversaoPorIntervalo);
+            p.AversaoAFome = Math.Max(0, p.AversaoAFome - CuraDeAversaoPorIntervalo);
+            p.AversaoAoSono = Math.Max(0, p.AversaoAoSono - CuraDeAversaoPorIntervalo);
+            p.AversaoAExpedicao = Math.Max(0, p.AversaoAExpedicao - CuraDeAversaoPorIntervalo);
         }
     }
 
@@ -760,6 +841,30 @@ public sealed partial class EstadoDoJogo
         TentarForragearOuCacar(ajudante);
     }
 
+    // crianca nao consegue se mover sozinha (ver TentarNascerCrianca) -- um adulto disponivel vai
+    // ate ela e "carrega" pro abrigo mais proximo assim que chega adjacente, num unico passo
+    private void TentarResgatarCriancaDoFrio(Personagem ajudante, Personagem crianca)
+    {
+        if (EstaAdjacente(ajudante.Posicao, crianca.Posicao))
+        {
+            Caminho.ProximoPasso(_mapaDaVila!, crianca.Posicao,
+                pos => _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa || EstaPertoDeFogueira(_mapaDaVila, pos),
+                out var abrigoEncontrado);
+
+            if (abrigoEncontrado is { } abrigo)
+            {
+                crianca.Posicao = abrigo;
+                AdicionarMensagem($"{NomeDoAtor(ajudante)} leva a criança pra perto do abrigo.");
+            }
+
+            return;
+        }
+
+        var passoAteCrianca = Caminho.ProximoPasso(_mapaDaVila!, ajudante.Posicao, pos => EstaAdjacente(pos, crianca.Posicao));
+        if (passoAteCrianca is { } destino)
+            MoverPersonagemAutonomo(ajudante, destino);
+    }
+
     private void TentarResolverFome(Personagem p)
     {
         var comida = p.Mochila.FirstOrDefault(it => it.Tipo == TipoDeItem.Comida);
@@ -782,6 +887,13 @@ public sealed partial class EstadoDoJogo
     // melhor abandonar a comida da vez do que apostar a propria sobrevivencia
     private void TentarForragearOuCacar(Personagem p)
     {
+        var plantacaoAdjacente = ProcurarPlantacaoAdjacente(p.Posicao);
+        if (plantacaoAdjacente is { } plantacao)
+        {
+            ColherPlantacaoAutonomamente(p, plantacao);
+            return;
+        }
+
         var arvoreFrutiferaAdjacente = ProcurarArvoreFrutiferaAdjacente(p.Posicao);
         if (arvoreFrutiferaAdjacente is { } arvoreFruta)
         {
@@ -1011,7 +1123,7 @@ public sealed partial class EstadoDoJogo
     }
 
     private string ParaQuem(Personagem p) =>
-        ReferenceEquals(p, Personagem) ? "para você" : $"para a Pessoa {_personagens.IndexOf(p) + 1}";
+        ReferenceEquals(p, Personagem) ? "para você" : $"para {p.Nome}";
 
     private void TentarBuscarAbrigo(Personagem p)
     {
@@ -1066,12 +1178,15 @@ public sealed partial class EstadoDoJogo
             MoverPersonagemAutonomo(p, destino);
     }
 
-    private Posicao? ProcurarArvoreAdjacente(Posicao pos) => ProcurarArvoreQueSatisfaz(pos, EhArvoreColhivel);
+    private Posicao? ProcurarArvoreAdjacente(Posicao pos) => ProcurarCelulaAdjacenteQueSatisfaz(pos, EhArvoreColhivel);
 
     private Posicao? ProcurarArvoreFrutiferaAdjacente(Posicao pos) =>
-        ProcurarArvoreQueSatisfaz(pos, v => _mapaDaVila![v.X, v.Y] == TipoDeCelula.ArvoreFrutifera && PodeColherFruta(v));
+        ProcurarCelulaAdjacenteQueSatisfaz(pos, v => _mapaDaVila![v.X, v.Y] == TipoDeCelula.ArvoreFrutifera && PodeColher(v));
 
-    private Posicao? ProcurarArvoreQueSatisfaz(Posicao pos, Func<Posicao, bool> predicado)
+    private Posicao? ProcurarPlantacaoAdjacente(Posicao pos) =>
+        ProcurarCelulaAdjacenteQueSatisfaz(pos, v => _mapaDaVila![v.X, v.Y] == TipoDeCelula.Plantacao && PodeColher(v));
+
+    private Posicao? ProcurarCelulaAdjacenteQueSatisfaz(Posicao pos, Func<Posicao, bool> predicado)
     {
         foreach (var d in Direcoes)
         {
@@ -1089,10 +1204,10 @@ public sealed partial class EstadoDoJogo
         if (tipo == TipoDeCelula.Arvore)
             return true;
 
-        return tipo == TipoDeCelula.ArvoreFrutifera && PodeColherFruta(pos);
+        return tipo == TipoDeCelula.ArvoreFrutifera && PodeColher(pos);
     }
 
-    private bool PodeColherFruta(Posicao posicao) =>
+    private bool PodeColher(Posicao posicao) =>
         !_proximaColheitaDisponivel.TryGetValue(posicao, out var turnoDisponivel) || _turno >= turnoDisponivel;
 
     private void ColherArvoreAutonomamente(Personagem p, Posicao arvore)
@@ -1113,6 +1228,17 @@ public sealed partial class EstadoDoJogo
         Madeira += MadeiraPorArvore;
         AdicionarMensagem($"{NomeDoAtor(p)} corta uma árvore e ganha {MadeiraPorArvore} de madeira.");
         FalarSobre(p, "madeira");
+    }
+
+    // ao contrario da fruta, a plantacao e colheita unica -- volta a ser Grama e precisa ser
+    // replantada (ver TentarPlantar em EstadoDoJogo.Construcao.cs, so o jogador planta por enquanto)
+    private void ColherPlantacaoAutonomamente(Personagem p, Posicao plantacao)
+    {
+        p.Mochila.Add(new Item("Vegetais", TipoDeItem.Comida, ValorDoVegetal));
+        _mapaDaVila![plantacao.X, plantacao.Y] = TipoDeCelula.Grama;
+        _proximaColheitaDisponivel.Remove(plantacao);
+        AdicionarMensagem($"{NomeDoAtor(p)} colhe a plantação e ganha vegetais.");
+        FalarSobre(p, "plantio");
     }
 
     private void TentarConstruirAutonomamente(Personagem p)
@@ -1172,7 +1298,7 @@ public sealed partial class EstadoDoJogo
     }
 
     private string NomeDoAtor(Personagem p) =>
-        ReferenceEquals(p, Personagem) ? "Você" : $"A Pessoa {_personagens.IndexOf(p) + 1}";
+        ReferenceEquals(p, Personagem) ? "Você" : p.Nome;
 
     private void MoverBichos()
     {
@@ -1326,9 +1452,8 @@ public sealed partial class EstadoDoJogo
 
     private void AtualizarNecessidade(Func<Personagem, int> obter, Action<Personagem, int> definir, int maximo, int incremento, int dano, string mensagemNoMaximo, string mensagemDeMorte, string causaDeTrauma, Func<Personagem, int>? alivio = null, int minimo = 0, bool ignorarCriancas = false)
     {
-        for (var i = 0; i < _personagens.Count; i++)
+        foreach (var p in _personagens)
         {
-            var p = _personagens[i];
             if (p.Vida <= 0 || (ignorarCriancas && p.EhCrianca) || p.EstaEmExpedicao)
                 continue;
 
@@ -1345,7 +1470,7 @@ public sealed partial class EstadoDoJogo
                 var pisoEfetivo = mudanca < 0 ? Math.Min(minimo, valor) : 0;
                 definir(p, Math.Clamp(valor + mudanca, pisoEfetivo, maximo));
                 if (obter(p) == maximo)
-                    AdicionarMensagem($"A Pessoa {i + 1} {mensagemNoMaximo}.");
+                    AdicionarMensagem($"{NomeDoAtor(p)} {mensagemNoMaximo}.");
             }
             else
             {
@@ -1353,7 +1478,7 @@ public sealed partial class EstadoDoJogo
                 p.Vida = Math.Max(0, p.Vida - dano);
                 if (vidaAntes > 0 && p.Vida == 0)
                 {
-                    AdicionarMensagem($"A Pessoa {i + 1} {mensagemDeMorte}.");
+                    AdicionarMensagem($"{NomeDoAtor(p)} {mensagemDeMorte}.");
                     RegistrarTraumaPorMorte(p, causaDeTrauma);
                 }
             }
@@ -1442,6 +1567,7 @@ public sealed partial class EstadoDoJogo
         ["desejo_descansar"] = new[] { "Acho que vou só sentar um pouco.", "Não custa nada relaxar um instante." },
         ["medo"] = new[] { "Eu não quero morrer, preciso me cuidar.", "Isso está ficando perigoso demais pra mim." },
         ["expedicao"] = new[] { "Vou até a masmorra buscar o que precisamos.", "Alguém tem que ir atrás de recursos lá embaixo." },
+        ["plantio"] = new[] { "Essa horta está dando bons vegetais.", "Plantar valeu a pena dessa vez." },
     };
 
     private void FalarSobre(Personagem p, string evento)
