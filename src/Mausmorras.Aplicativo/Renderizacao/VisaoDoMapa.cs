@@ -16,13 +16,14 @@ public sealed class VisaoDoMapa : View
     private readonly int _larguraDoMundo;
     private readonly int _alturaDoMundo;
     private EstadoDoJogo _estado;
-    private bool _previaAtiva;
-    private DateTime _ultimoCliqueDoC;
-    private bool _previaFogueiraAtiva;
-    private DateTime _ultimoCliqueDoF;
-    private bool _previaPlantioAtiva;
-    private DateTime _ultimoCliqueDoP;
+    // um so campo pra qual previa esta ativa (em vez de um bool por tipo) -- garante exclusao mutua
+    // por construcao: nunca da pra esquecer de desligar as outras ao ligar uma nova, como acontecia
+    // antes (cada tecla tinha que lembrar de zerar os outros dois bools manualmente)
+    private ModoDePrevia _previaAtiva = ModoDePrevia.Nenhuma;
+    private DateTime _ultimoCliqueDePrevia;
     private object? _timeoutTempoReal;
+
+    private enum ModoDePrevia { Nenhuma, Construcao, Fogueira, Plantio }
 
     private readonly Dictionary<KeyCode, Func<bool>> _acoesPorTecla;
     private readonly Dictionary<char, Func<bool>> _acoesPorLetra;
@@ -141,14 +142,15 @@ public sealed class VisaoDoMapa : View
             }
         }
 
-        if (_estado.LocalAtual == TipoDeLocal.Vila && _previaAtiva)
-            DesenharPreviaDeConstrucao(mapa, camX, camY, viewport);
-
-        if (_estado.LocalAtual == TipoDeLocal.Vila && _previaFogueiraAtiva)
-            DesenharPreviaDeFogueira(mapa, camX, camY, viewport);
-
-        if (_estado.LocalAtual == TipoDeLocal.Vila && _previaPlantioAtiva)
-            DesenharPreviaDePlantio(mapa, camX, camY, viewport);
+        if (_estado.LocalAtual == TipoDeLocal.Vila)
+        {
+            switch (_previaAtiva)
+            {
+                case ModoDePrevia.Construcao: DesenharPreviaDeConstrucao(mapa, camX, camY, viewport); break;
+                case ModoDePrevia.Fogueira: DesenharPreviaDeFogueira(mapa, camX, camY, viewport); break;
+                case ModoDePrevia.Plantio: DesenharPreviaDePlantio(mapa, camX, camY, viewport); break;
+            }
+        }
 
         foreach (var bicho in _estado.BichosNoLocalAtual)
             DesenharEntidade(bicho.Posicao, camX, camY, viewport, Cores.Bicho, new Rune('a'));
@@ -371,87 +373,37 @@ public sealed class VisaoDoMapa : View
         _timeoutTempoReal = null;
     }
 
-    private bool AlternarOuConstruir()
+    private bool AlternarOuConstruir() => AlternarPrevia(ModoDePrevia.Construcao, () => _estado.TentarConstruir());
+
+    private bool AlternarOuConstruirFogueira() => AlternarPrevia(ModoDePrevia.Fogueira, () => _estado.TentarConstruirFogueira());
+
+    private bool AlternarOuPlantar() => AlternarPrevia(ModoDePrevia.Plantio, () => _estado.TentarPlantar());
+
+    // clique unico liga a previa desse modo (desligando qualquer outra); clique duplo dentro da
+    // janela cancela; um segundo clique fora da janela (mas com a mesma previa ja ativa) confirma
+    private bool AlternarPrevia(ModoDePrevia modo, Action confirmar)
     {
         if (_estado.Modo != ModoDeJogo.Jogando)
             return false;
 
         var agora = DateTime.UtcNow;
-        var cliqueDuplo = _previaAtiva && agora - _ultimoCliqueDoC <= JanelaDeCliqueDuplo;
+        var cliqueDuplo = _previaAtiva == modo && agora - _ultimoCliqueDePrevia <= JanelaDeCliqueDuplo;
 
         if (cliqueDuplo)
         {
-            _previaAtiva = false;
+            _previaAtiva = ModoDePrevia.Nenhuma;
         }
-        else if (_previaAtiva)
+        else if (_previaAtiva == modo)
         {
-            _estado.TentarConstruir();
-            _previaAtiva = false;
+            confirmar();
+            _previaAtiva = ModoDePrevia.Nenhuma;
         }
         else
         {
-            _previaAtiva = true;
-            _previaFogueiraAtiva = false;
-            _previaPlantioAtiva = false;
+            _previaAtiva = modo;
         }
 
-        _ultimoCliqueDoC = agora;
-        return true;
-    }
-
-    private bool AlternarOuConstruirFogueira()
-    {
-        if (_estado.Modo != ModoDeJogo.Jogando)
-            return false;
-
-        var agora = DateTime.UtcNow;
-        var cliqueDuplo = _previaFogueiraAtiva && agora - _ultimoCliqueDoF <= JanelaDeCliqueDuplo;
-
-        if (cliqueDuplo)
-        {
-            _previaFogueiraAtiva = false;
-        }
-        else if (_previaFogueiraAtiva)
-        {
-            _estado.TentarConstruirFogueira();
-            _previaFogueiraAtiva = false;
-        }
-        else
-        {
-            _previaFogueiraAtiva = true;
-            _previaAtiva = false;
-            _previaPlantioAtiva = false;
-        }
-
-        _ultimoCliqueDoF = agora;
-        return true;
-    }
-
-    private bool AlternarOuPlantar()
-    {
-        if (_estado.Modo != ModoDeJogo.Jogando)
-            return false;
-
-        var agora = DateTime.UtcNow;
-        var cliqueDuplo = _previaPlantioAtiva && agora - _ultimoCliqueDoP <= JanelaDeCliqueDuplo;
-
-        if (cliqueDuplo)
-        {
-            _previaPlantioAtiva = false;
-        }
-        else if (_previaPlantioAtiva)
-        {
-            _estado.TentarPlantar();
-            _previaPlantioAtiva = false;
-        }
-        else
-        {
-            _previaPlantioAtiva = true;
-            _previaAtiva = false;
-            _previaFogueiraAtiva = false;
-        }
-
-        _ultimoCliqueDoP = agora;
+        _ultimoCliqueDePrevia = agora;
         return true;
     }
 }

@@ -5,7 +5,6 @@ namespace Mausmorras.Aplicativo.Renderizacao;
 public sealed class PainelStatus : PainelDeEstado
 {
     private const int LarguraDaBarra = 14;
-    private const double LimiarVidaCritica = 0.3; // mesmo espirito do limiar interno de "medo de morrer"
 
     public PainelStatus(Func<EstadoDoJogo> obterEstado) : base(obterEstado)
     {
@@ -52,8 +51,8 @@ public sealed class PainelStatus : PainelDeEstado
         }
 
         var vidaPercentual = (double)personagem.Vida / personagem.VidaMaxima;
-        var corVida = CorDaVida(vidaPercentual);
-        var alertaVida = vidaPercentual <= LimiarVidaCritica ? "⚠ " : "";
+        var corVida = DesenhoDeCaixa.CorDaVida(vidaPercentual);
+        var alertaVida = vidaPercentual <= DesenhoDeCaixa.LimiarVidaCritica ? "⚠ " : "";
         var linha1 = 0;
         linha1 = EscreverSegmento(linha1, 1, $" {alertaVida}Vida  {DesenhoDeCaixa.DesenharBarra(personagem.Vida, personagem.VidaMaxima, LarguraDaBarra)} {personagem.Vida}/{personagem.VidaMaxima}   ", corVida);
         linha1 = EscreverSegmento(linha1, 1, $"Fome  {DesenhoDeCaixa.DesenharBarra(personagem.Fome, EstadoDoJogo.FomeMaxima, LarguraDaBarra)} {personagem.Fome}   ", CorDaNecessidade(personagem.Fome, EstadoDoJogo.FomeMaxima));
@@ -71,9 +70,9 @@ public sealed class PainelStatus : PainelDeEstado
 
     private void DesenharFimDeJogo(EstadoDoJogo estado)
     {
-        var diaTexto = estado.Dia == 1 ? "1 dia" : $"{estado.Dia} dias";
-        var turnoTexto = estado.Turno == 1 ? "1 turno" : $"{estado.Turno} turnos";
-        var pessoaTexto = estado.PopulacaoTotal == 1 ? "1 pessoa" : $"{estado.PopulacaoTotal} pessoas";
+        var diaTexto = Pluralizar(estado.Dia, "dia", "dias");
+        var turnoTexto = Pluralizar(estado.Turno, "turno", "turnos");
+        var pessoaTexto = Pluralizar(estado.PopulacaoTotal, "pessoa", "pessoas");
 
         EscreverCentralizado(0, "☠  FIM DE JOGO — a vila foi extinta  ☠", Cores.Perigo);
         EscreverCentralizado(1, $"Sobreviveu {diaTexto}, {turnoTexto} — população total: {pessoaTexto}", Cores.TextoSecundario);
@@ -90,6 +89,8 @@ public sealed class PainelStatus : PainelDeEstado
         EscreverCentralizado(2, "...ou pressione R para começar um novo jogo", Cores.TextoPrincipal);
     }
 
+    private static string Pluralizar(int n, string singular, string plural) => n == 1 ? $"1 {singular}" : $"{n} {plural}";
+
     private void EscreverCentralizado(int y, string texto, Color cor)
     {
         var x = Math.Max(0, (Frame.Width - texto.Length) / 2);
@@ -103,14 +104,6 @@ public sealed class PainelStatus : PainelDeEstado
         AddStr(x, y, texto);
         return x + texto.Length;
     }
-
-    private static Color CorDaVida(double percentual) => percentual switch
-    {
-        <= LimiarVidaCritica => Cores.Perigo,
-        >= 0.6 => Cores.VidaAlta,
-        >= 0.3 => Cores.VidaMedia,
-        _ => Cores.VidaBaixa
-    };
 
     private static Color CorDaNecessidade(int valor, int maximo) => ((double)valor / maximo) switch
     {

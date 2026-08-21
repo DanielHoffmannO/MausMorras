@@ -56,9 +56,12 @@ public sealed partial class EstadoDoJogo
             _ => (35, 35, 30)
         };
 
-        var sorteio = random.Next(pesoComum + pesoResistente + pesoFeroz);
-        if (sorteio < pesoComum) return TipoDeMonstro.Comum;
-        return sorteio < pesoComum + pesoResistente ? TipoDeMonstro.Resistente : TipoDeMonstro.Feroz;
+        return SorteioPonderado.EscolherIndice(random, pesoComum, pesoResistente, pesoFeroz) switch
+        {
+            0 => TipoDeMonstro.Comum,
+            1 => TipoDeMonstro.Resistente,
+            _ => TipoDeMonstro.Feroz
+        };
     }
 
     private static (int Vida, int Dano) AjustarPorTipoDeMonstro(int vidaBase, int danoBase, TipoDeMonstro tipo) => tipo switch

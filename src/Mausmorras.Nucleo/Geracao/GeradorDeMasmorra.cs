@@ -199,9 +199,7 @@ public sealed class GeradorDeMasmorra
             _ => (10, 40, 50)
         };
 
-        var sorteio = random.Next(peso1 + peso2 + peso3);
-        if (sorteio < peso1) return 1;
-        return sorteio < peso1 + peso2 ? 2 : 3;
+        return SorteioPonderado.EscolherIndice(random, peso1, peso2, peso3) + 1; // tiers sao 1-based
     }
 
     private static void PosicionarPortas(MapaDaMasmorra mapa, Sala sala)

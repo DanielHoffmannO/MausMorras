@@ -541,10 +541,12 @@ public sealed partial class EstadoDoJogo
             // crianca e fisicamente imovel (ver TentarNascerCrianca) -- se o abrigo que a protegia no
             // nascimento expira depois (fogueira apaga), ela nao tem como se salvar sozinha do frio.
             // mesmo espirito da cooperacao de comida acima, so que so dispara em frio REALMENTE severo
-            var criancaEmPerigoDeFrio = _personagens.FirstOrDefault(c =>
-                c.EhCrianca && c.Vida > 0 && EstaNaVila(c) && !EstaProtegidoDoFrio(c) &&
-                SeveridadesDe(c).Temperatura >= SeveridadeMinimaParaInterromperPorFrio);
-            var severidadeDaCriancaComFrio = criancaEmPerigoDeFrio is not null ? SeveridadesDe(criancaEmPerigoDeFrio).Temperatura : 0.0;
+            var criancaComFrio = _personagens
+                .Where(c => c.EhCrianca && c.Vida > 0 && EstaNaVila(c) && !EstaProtegidoDoFrio(c))
+                .Select(c => (Crianca: c, Severidade: SeveridadesDe(c).Temperatura))
+                .FirstOrDefault(t => t.Severidade >= SeveridadeMinimaParaInterromperPorFrio);
+            var criancaEmPerigoDeFrio = criancaComFrio.Crianca;
+            var severidadeDaCriancaComFrio = criancaComFrio.Severidade; // 0.0 quando ninguem encontrado (default do tuple)
 
             // "compromisso de acao": uma vez que a pessoa comeca a perseguir uma necessidade, ela so
             // troca de alvo se outra ficar CLARAMENTE mais severa (margem abaixo). Sem isso, quando
@@ -552,15 +554,19 @@ public sealed partial class EstadoDoJogo
             // reavaliada do zero a cada turno fica alternando de alvo sem nunca completar nenhum
             // caminho -- as duas acabam batendo no maximo ao mesmo tempo e a pessoa morre por uma
             // delas mesmo com recursos (caca, abrigo) disponiveis o tempo todo
-            var candidatos = new List<(string Rotulo, double Severidade, Action Acao)>();
-            if (fomeUrgente) candidatos.Add(("fome", fomeSeveridade, () => TentarResolverFome(p)));
-            if (frioUrgente) candidatos.Add(("frio", temperaturaSeveridade, () => TentarBuscarAbrigo(p)));
+            // Urgente: essa necessidade nunca fica presa atras de um compromisso antigo (ver uso
+            // logo abaixo). frio so e urgente quando REALMENTE severo (ou com medo de morrer); fome
+            // e sono so via medo de morrer; anoitecer e resgate_frio sao sempre urgentes assim que
+            // entram na lista (resgate_frio ja exige frio severo pra existir, ver criancaComFrio acima)
+            var candidatos = new List<(string Rotulo, double Severidade, bool Urgente, Action Acao)>();
+            if (fomeUrgente) candidatos.Add(("fome", fomeSeveridade, estaComMedo, () => TentarResolverFome(p)));
+            if (frioUrgente) candidatos.Add(("frio", temperaturaSeveridade, estaComMedo || temperaturaSeveridade >= SeveridadeMinimaParaInterromperPorFrio, () => TentarBuscarAbrigo(p)));
             // sono so entra na lista se ja existir casa pra ir -- caso contrario TentarDormir nao
             // acha nenhuma Cama e nao faz nada
-            if (sonoUrgente && _existeCasaNaVila) candidatos.Add(("sono", sonoSeveridade, () => TentarDormir(p)));
-            if (anoitecerIminente) candidatos.Add(("anoitecer", severidadeAnoitecer, () => TentarBuscarAbrigo(p)));
-            if (alguemPrecisandoDeComida is not null) candidatos.Add(("cooperacao", severidadeDeQuemPrecisa, () => TentarAjudarComFome(p, alguemPrecisandoDeComida!)));
-            if (criancaEmPerigoDeFrio is not null) candidatos.Add(("resgate_frio", severidadeDaCriancaComFrio, () => TentarResgatarCriancaDoFrio(p, criancaEmPerigoDeFrio!)));
+            if (sonoUrgente && _existeCasaNaVila) candidatos.Add(("sono", sonoSeveridade, estaComMedo, () => TentarDormir(p)));
+            if (anoitecerIminente) candidatos.Add(("anoitecer", severidadeAnoitecer, true, () => TentarBuscarAbrigo(p)));
+            if (alguemPrecisandoDeComida is not null) candidatos.Add(("cooperacao", severidadeDeQuemPrecisa, false, () => TentarAjudarComFome(p, alguemPrecisandoDeComida!)));
+            if (criancaEmPerigoDeFrio is not null) candidatos.Add(("resgate_frio", severidadeDaCriancaComFrio, true, () => TentarResgatarCriancaDoFrio(p, criancaEmPerigoDeFrio!)));
 
             Action? acaoVencedora = null;
 
@@ -569,16 +575,7 @@ public sealed partial class EstadoDoJogo
                 var maisSevero = candidatos.OrderByDescending(c => c.Severidade).First();
                 var candidatoAtual = candidatos.FirstOrDefault(c => c.Rotulo == p.ObjetivoAtual);
 
-                // frio (quando REALMENTE severo) e o aviso antecipado de anoitecer nunca ficam presos
-                // atras de um compromisso. "medo de morrer" tambem nao -- com a vida criticamente baixa,
-                // a propria sobrevivencia (fome/frio/sono) nunca fica presa atras de um compromisso antigo.
-                // resgate_frio so entra na lista de candidatos ja acima do limiar severo (ver filtro de
-                // criancaEmPerigoDeFrio), entao sempre que vence a disputa e tratado com a mesma urgencia
-                var ehUrgenciaDeFrio = maisSevero.Rotulo is "anoitecer" or "resgate_frio"
-                    || (maisSevero.Rotulo == "frio" && maisSevero.Severidade >= SeveridadeMinimaParaInterromperPorFrio)
-                    || (estaComMedo && maisSevero.Rotulo is "fome" or "frio" or "sono");
-
-                var escolhido = !ehUrgenciaDeFrio && candidatoAtual.Acao is not null
+                var escolhido = !maisSevero.Urgente && candidatoAtual.Acao is not null
                     && maisSevero.Severidade - candidatoAtual.Severidade < MargemParaTrocarDeObjetivo
                     ? candidatoAtual
                     : maisSevero;
@@ -781,15 +778,17 @@ public sealed partial class EstadoDoJogo
         if (_turno % IntervaloDeCuraDeAversao != 0)
             return;
 
+        double Diminuir(double v) => Math.Max(0, v - CuraDeAversaoPorIntervalo);
+
         foreach (var p in _personagens)
         {
             if (p.Vida <= 0 || !EstaNaVila(p) || !EstaSeguro(p))
                 continue;
 
-            p.AversaoAoFrio = Math.Max(0, p.AversaoAoFrio - CuraDeAversaoPorIntervalo);
-            p.AversaoAFome = Math.Max(0, p.AversaoAFome - CuraDeAversaoPorIntervalo);
-            p.AversaoAoSono = Math.Max(0, p.AversaoAoSono - CuraDeAversaoPorIntervalo);
-            p.AversaoAExpedicao = Math.Max(0, p.AversaoAExpedicao - CuraDeAversaoPorIntervalo);
+            p.AversaoAoFrio = Diminuir(p.AversaoAoFrio);
+            p.AversaoAFome = Diminuir(p.AversaoAFome);
+            p.AversaoAoSono = Diminuir(p.AversaoAoSono);
+            p.AversaoAExpedicao = Diminuir(p.AversaoAExpedicao);
         }
     }
 
@@ -847,9 +846,7 @@ public sealed partial class EstadoDoJogo
     {
         if (EstaAdjacente(ajudante.Posicao, crianca.Posicao))
         {
-            Caminho.ProximoPasso(_mapaDaVila!, crianca.Posicao,
-                pos => _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa || EstaPertoDeFogueira(_mapaDaVila, pos),
-                out var abrigoEncontrado);
+            Caminho.ProximoPasso(_mapaDaVila!, crianca.Posicao, EhAbrigo, out var abrigoEncontrado);
 
             if (abrigoEncontrado is { } abrigo)
             {
@@ -1125,6 +1122,11 @@ public sealed partial class EstadoDoJogo
     private string ParaQuem(Personagem p) =>
         ReferenceEquals(p, Personagem) ? "para você" : $"para {p.Nome}";
 
+    // "abrigo" pra fins de busca de caminho -- compartilhado entre TentarBuscarAbrigo (adulto foge
+    // do frio) e TentarResgatarCriancaDoFrio (adulto leva crianca pro abrigo mais proximo)
+    private bool EhAbrigo(Posicao pos) =>
+        _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa || EstaPertoDeFogueira(_mapaDaVila, pos);
+
     private void TentarBuscarAbrigo(Personagem p)
     {
         if (EstaProtegidoDoFrio(p))
@@ -1140,8 +1142,7 @@ public sealed partial class EstadoDoJogo
         if (TentarProtegerDoFrioDuranteExpedicao(p))
             return;
 
-        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, pos =>
-            _mapaDaVila![pos.X, pos.Y] == TipoDeCelula.PisoDaCasa || EstaPertoDeFogueira(_mapaDaVila, pos));
+        var passo = Caminho.ProximoPasso(_mapaDaVila!, p.Posicao, EhAbrigo);
         if (passo is { } destino)
             MoverPersonagemAutonomo(p, destino);
     }

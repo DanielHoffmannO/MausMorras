@@ -37,4 +37,15 @@ internal static class DesenhoDeCaixa
         var preenchido = maximo <= 0 ? 0 : Math.Clamp((int)Math.Round((double)valor / maximo * largura), 0, largura);
         return "[" + new string('█', preenchido) + new string('░', largura - preenchido) + "]";
     }
+
+    // compartilhado entre PainelStatus e PainelInventario -- mesmo espirito do limiar interno de
+    // "medo de morrer" no nucleo do jogo
+    public const double LimiarVidaCritica = 0.3;
+
+    public static Color CorDaVida(double percentual) => percentual switch
+    {
+        <= LimiarVidaCritica => Cores.Perigo,
+        >= 0.6 => Cores.VidaAlta,
+        _ => Cores.VidaMedia
+    };
 }

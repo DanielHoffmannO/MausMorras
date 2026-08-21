@@ -94,7 +94,7 @@ public sealed class PainelInventario : PainelDeEstado
             DesenharLinha(2, 3 + i, texto, item is not null, _coluna == Coluna.Equipamento && _indiceEquipamento == i);
         }
 
-        var corVida = (double)personagem.Vida / personagem.VidaMaxima <= 0.3 ? Cores.Perigo : Cores.TextoSecundario;
+        var corVida = (double)personagem.Vida / personagem.VidaMaxima <= DesenhoDeCaixa.LimiarVidaCritica ? Cores.Perigo : Cores.TextoSecundario;
         SetAttribute(new Attribute(corVida, Cores.Fundo));
         AddStr(2, 9, $"Vida: {DesenhoDeCaixa.DesenharBarra(personagem.Vida, personagem.VidaMaxima, 10)} {personagem.Vida}/{personagem.VidaMaxima}");
         SetAttribute(new Attribute(Cores.TextoSecundario, Cores.Fundo));
@@ -140,9 +140,7 @@ public sealed class PainelInventario : PainelDeEstado
         // inteira) deixava a selecao dificil de notar rapido, alem de nao dar nenhum indicio de
         // "voce esta aqui" quando o olho ja passou batido pela cor
         var prefixo = selecionado ? "▸ " : "  ";
-        var textoFormatado = (prefixo + texto).Length > LarguraColuna
-            ? (prefixo + texto)[..LarguraColuna]
-            : (prefixo + texto).PadRight(LarguraColuna);
+        var textoFormatado = (prefixo + texto).PadRight(LarguraColuna)[..LarguraColuna];
 
         var cor = selecionado ? Cores.Selecao : preenchido ? Cores.TextoPrincipal : Cores.TextoSecundario;
         SetAttribute(selecionado

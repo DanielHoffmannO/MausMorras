@@ -21,30 +21,10 @@ public sealed partial class EstadoDoJogo
         }
 
         if (Mapa[alvo.X, alvo.Y] == TipoDeCelula.ArvoreFrutifera)
-        {
-            if (!PodeColher(alvo))
-            {
-                AdicionarMensagem("A árvore frutífera ainda não tem frutas para colher.");
-                return false;
-            }
-
-            ColherFruta(alvo);
-            AvancarTurno();
-            return true;
-        }
+            return TentarColherCultivo(alvo, "A árvore frutífera ainda não tem frutas para colher.", ColherFruta);
 
         if (Mapa[alvo.X, alvo.Y] == TipoDeCelula.Plantacao)
-        {
-            if (!PodeColher(alvo))
-            {
-                AdicionarMensagem("A plantação ainda não está pronta para colher.");
-                return false;
-            }
-
-            ColherPlantacao(alvo);
-            AvancarTurno();
-            return true;
-        }
+            return TentarColherCultivo(alvo, "A plantação ainda não está pronta para colher.", ColherPlantacao);
 
         var monstro = _monstros.FirstOrDefault(m => m.Posicao == alvo);
         if (monstro is not null)
@@ -132,6 +112,21 @@ public sealed partial class EstadoDoJogo
         Personagem.Mochila.Add(new Item("Vegetais", TipoDeItem.Comida, ValorDoVegetal));
         AdicionarMensagem("Você colhe a plantação e ganha vegetais.");
         FalarSobre(Personagem, "plantio");
+    }
+
+    // ArvoreFrutifera e Plantacao colhem do mesmo jeito (gate de maturidade + mensagem de "nao esta
+    // pronta" + colheita) -- so muda a mensagem e o metodo de colheita, entao ficam num unico lugar
+    private bool TentarColherCultivo(Posicao alvo, string mensagemNaoPronto, Action<Posicao> colher)
+    {
+        if (!PodeColher(alvo))
+        {
+            AdicionarMensagem(mensagemNaoPronto);
+            return false;
+        }
+
+        colher(alvo);
+        AvancarTurno();
+        return true;
     }
 
     // cuida so do ataque do jogador (dano no monstro, morte/loot) -- a retaliacao do monstro (se
